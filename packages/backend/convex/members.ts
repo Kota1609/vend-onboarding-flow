@@ -86,6 +86,7 @@ export const update = mutation({
 		name: v.optional(v.string()),
 		email: v.optional(v.string()),
 		phone: v.optional(v.string()),
+		inviteOverrideMethod: v.optional(inviteMethod),
 	},
 	handler: async (ctx, { memberId, ...fields }) => {
 		const member = await ctx.db.get(memberId);
@@ -108,6 +109,8 @@ export const update = mutation({
 		if (fields.name !== undefined) updates.name = fields.name;
 		if (fields.email !== undefined) updates.email = fields.email || undefined;
 		if (fields.phone !== undefined) updates.phone = fields.phone || undefined;
+		if (fields.inviteOverrideMethod !== undefined)
+			updates.inviteOverrideMethod = fields.inviteOverrideMethod;
 
 		// Recompute auto method if contact info changed
 		if (fields.email !== undefined || fields.phone !== undefined) {

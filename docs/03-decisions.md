@@ -31,3 +31,8 @@
 ## ADR-007: Demo seed data
 - **Decision:** Include a dev-only seed() mutation that populates 1 tenant, 2 passes, ~8 members across statuses.
 - **Rationale:** Reviewers will run locally and want it to "just work." Also makes Loom recording smooth.
+
+## ADR-008: Draft method override via update mutation
+- **Decision:** Allow `inviteOverrideMethod` on the existing `members.update` mutation (draft-only) rather than creating a separate mutation or reusing `changeInviteMethod` (which requires `status === "invited"`).
+- **Rationale:** The brief says admins can override method before sending. Reusing `update` keeps the API surface small — one mutation handles all draft edits. `sendInvite` already reads `inviteOverrideMethod ?? inviteAutoMethod`, so the override propagates without extra wiring.
+- **Tradeoff:** `update` now serves two purposes (edit fields + set method). Acceptable given draft is the only mutable status.
