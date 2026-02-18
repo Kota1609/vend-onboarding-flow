@@ -14,33 +14,48 @@ This project was created with [Better-T-Stack](https://github.com/AmanVarshney01
 
 ## Getting Started
 
-First, install the dependencies:
-
 ```bash
 pnpm install
 ```
 
-## Convex Setup
+## Running the App (Two Terminals)
 
-This project uses Convex as a backend. You'll need to set up Convex before running the app:
-
-```bash
-pnpm run dev:setup
-```
-
-Follow the prompts to create a new Convex project and connect it to your application.
-
-Copy environment variables from `packages/backend/.env.local` to `apps/*/.env`.
-
-
-Then, run the development server:
+### Terminal 1 — Convex backend
 
 ```bash
-pnpm run dev
+cd packages/backend
+npx convex dev
 ```
 
-Open [http://localhost:3001](http://localhost:3001) in your browser to see the web application.
-Your app will connect to the Convex cloud backend automatically.
+**First time only:** run `npx convex dev --configure`, select **"Start without an account (run Convex locally)"**, and name the project `onboarding-flow`. This writes `packages/backend/.env.local`.
+
+Convex runs at `http://127.0.0.1:3210`, dashboard at `http://127.0.0.1:6790`.
+
+### Terminal 2 — Web frontend
+
+```bash
+pnpm -F web dev
+```
+
+Opens at [http://localhost:3001](http://localhost:3001).
+
+### Or run both at once (Turborepo)
+
+```bash
+pnpm dev
+```
+
+> Convex must be configured first (see Terminal 1 above).
+
+### Environment
+
+`apps/web/.env` needs:
+
+```
+VITE_CONVEX_URL=http://127.0.0.1:3210
+```
+
+Copy from `apps/web/.env.example` if missing.
 
 
 ## Git Hooks and Formatting

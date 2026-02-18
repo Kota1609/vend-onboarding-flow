@@ -1,0 +1,93 @@
+---
+description: Core project conventions, safety rules, and hard constraints
+alwaysApply: true
+---
+
+# Project Conventions
+
+## Source of truth
+- Requirements: docs/00-brief.md
+- Architecture: docs/01-architecture.md
+- AI prompts: docs/02-prompts.md
+- Decisions: docs/03-decisions.md
+
+## Hard constraints
+- TypeScript strict mode. No `any`. No `unknown` without narrowing.
+- Zod schemas at ALL data boundaries (forms, file parsing, AI outputs).
+- Convex is the single source of truth for operational state.
+- Invite lifecycle transitions enforced server-side in mutations (never free-form status writes).
+- Progress is always computed from queries, never stored as derived counters.
+- AI-extracted data is NEVER written to DB without human confirmation.
+- No SSR. Static site generation only.
+- Biome for formatting and linting. No eslint/prettier.
+- Never commit .env, node_modules, or .DS_Store.
+
+## Patterns
+- Shared types between frontend and Convex via Zod schemas that mirror Convex validators.
+- Small, focused components. Meaningful names. No god components.
+- Prefer Convex reactive queries (useQuery) for live data. No polling.
+- Mock auth via role switcher (Vend Admin / Tenant Admin), not real auth.
+- Tenant admin is a separate entity (tenantAdmins table), not inlined on tenants.
+- Access codes are unique per member and stable across resends unless explicitly regenerated.
+- Commits: conventional commits (feat/fix/chore/docs), small and PR-sized.
+
+## Scope
+- Do NOT invent features beyond docs/00-brief.md.
+- If ambiguous, add a TODO comment and note in docs/03-decisions.md.
+
+---
+description: Convex backend patterns and lifecycle enforcement
+globs: packages/backend/convex/**/*.ts
+alwaysApply: true
+---
+
+# Convex Backend Rules
+
+## Lifecycle State Machine
+Allowed transitions (enforce in every mutation that changes member status):
+- Draft -> Invited (send invite)
+- Invited -> Accepted (mock accept endpoint)
+- Accepted -> Approved (tenant admin approves)
+- Accepted -> Rejected (tenant admin rejects)
+Never allow direct jumps. Throw an error on invalid transitions.
+
+## Invite Rules
+- sendInvite: draft -> invited (status changes)
+- resendInvite: stays invited (only adds inviteAttempts row, no status change)
+- changeMethod + resend: updates inviteOverrideMethod, adds inviteAttempts row, stays invited
+
+## Progress Computation
+Always derive from queries, never store:
+- Per pass: targetCount, totalMembers, draftCount, invitedCount, acceptedCount, approvedCount, rejectedCount
+- Per tenant: aggregate across all passes
+
+## Tenant Onboarding Status (computed, never stored)
+- Not Started: no passes defined OR no members added to any pass
+- In Progress: has passes with members, but approvedCount < targetMemberCount for any pass
+- Complete: for every pass, approvedCount >= targetMemberCount
+
+---
+description: React frontend patterns for Vend onboarding UI
+globs: apps/web/src/**/*.{ts,tsx}
+alwaysApply: false
+---
+
+# React Frontend Rules
+
+## UI Principles
+- Guided, step-based wizard for tenant admin
+- Progressive disclosure: overrides/advanced only when needed
+- Real-time reactive: Convex useQuery drives live progress
+- Actions close to data (bulk send, resend, approve/reject from tables)
+
+## Component Patterns
+- Use shadcn/ui components as base
+- Validate forms with Zod + react-hook-form
+- Loading states: use Skeleton components while Convex queries resolve
+- Empty states: always handle "no data yet" gracefully
+- Error boundaries on all route-level components
+
+## Mock Auth
+- Role switcher in top nav (Vend Admin / Tenant Admin)
+- Use React context to provide current role
+- Gate views based on role, not real authentication

@@ -3,10 +3,10 @@ import ReactDOM from "react-dom/client";
 import Loader from "./components/loader";
 import { routeTree } from "./routeTree.gen";
 
-  import { ConvexReactClient } from "convex/react";
-  import { env } from "@onboarding-flow/env/web";
-  import { ConvexProvider } from "convex/react";
-    const convex = new ConvexReactClient(env.VITE_CONVEX_URL);
+import { ConvexProvider, ConvexReactClient } from "convex/react";
+import { env } from "@onboarding-flow/env/web";
+
+const convex = new ConvexReactClient(env.VITE_CONVEX_URL);
 
 const router = createRouter({
   routeTree,
@@ -15,7 +15,7 @@ const router = createRouter({
   context: {},
   Wrap: function WrapComponent({ children }: { children: React.ReactNode }) {
     return <ConvexProvider client={convex}>{children}</ConvexProvider>;
-      },
+  },
 });
 
 declare module "@tanstack/react-router" {
