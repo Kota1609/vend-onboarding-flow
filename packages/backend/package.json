@@ -1,0 +1,23 @@
+{
+  "name": "@onboarding-flow/backend",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "convex dev",
+    "dev:setup": "convex dev --configure --until-success"
+  },
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "@onboarding-flow/config": "workspace:*",
+    "@types/node": "^24.3.0",
+    "typescript": "catalog:"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.45",
+    "ai": "^6.0.91",
+    "convex": "catalog:",
+    "dotenv": "catalog:",
+    "zod": "catalog:"
+  }
+}

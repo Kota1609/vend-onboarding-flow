@@ -1,0 +1,3 @@
+{
+  "extends": "@onboarding-flow/config/tsconfig.base.json",
+}

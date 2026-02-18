@@ -1,0 +1,29 @@
+{
+  "name": "onboarding-flow",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "check-types": "turbo check-types",
+    "dev:native": "turbo -F native dev",
+    "dev:web": "turbo -F web dev",
+    "dev:server": "turbo -F @onboarding-flow/backend dev",
+    "dev:setup": "turbo -F @onboarding-flow/backend dev:setup"
+  },
+  "packageManager": "pnpm@10.7.1",
+  "dependencies": {
+    "dotenv": "catalog:",
+    "zod": "catalog:",
+    "@onboarding-flow/env": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "catalog:",
+    "@onboarding-flow/config": "workspace:*",
+    "turbo": "^2.6.3"
+  }
+}
