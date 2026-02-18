@@ -94,6 +94,13 @@ Per tenant: aggregate across all passes
 - `getVendDashboard()` → tenant list + computed onboarding status + at-risk flags
 - `getPassMembers(passId)` → members + effectiveInviteMethod + duplicate flags + lastInviteAt
 
+## Storybook (required)
+Shared components must have stories built alongside them, not after. At minimum per the brief:
+- Invite status badges (draft, invited, accepted, approved, rejected)
+- Progress indicators (per-pass, per-tenant readiness)
+- Member table row (with all status + method variants)
+Each story must cover: default, loading, empty, error, and all status variants.
+
 ## UI Principles
 - Guided, step-based wizard for tenant admin
 - Progressive disclosure: overrides/advanced only when needed

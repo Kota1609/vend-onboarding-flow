@@ -13,6 +13,7 @@ Prioritize: correctness, type-safety, real-time reactive UX, auditability, clean
 - Prefer derived/computed progress from queries (avoid stored counters).
 - Server-side view models: queries return data shaped for the UI (joins + computed fields in Convex, not in React).
 - Typed error returns on sendInvite/resendInvite/AI import mutations for expected failures.
+- Storybook stories ship with every shared component. Build stories alongside components, not as a separate pass.
 
 ## Workflow
 1. Read docs/00-brief.md and docs/01-architecture.md before coding.
