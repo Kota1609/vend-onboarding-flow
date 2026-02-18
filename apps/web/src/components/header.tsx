@@ -7,6 +7,7 @@ import { Button } from "./ui/button";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
+	DropdownMenuGroup,
 	DropdownMenuItem,
 	DropdownMenuLabel,
 	DropdownMenuSeparator,
@@ -43,40 +44,40 @@ export default function Header() {
 				</nav>
 				<div className="flex items-center gap-3">
 					<DropdownMenu>
-						<DropdownMenuTrigger
-							render={
-								<Button variant="outline" size="sm">
-									{role === "vend_admin" ? "Vend Admin" : "Tenant Admin"}
-								</Button>
-							}
-						/>
+						<DropdownMenuTrigger render={<Button variant="outline" size="sm" />}>
+							{role === "vend_admin" ? "Vend Admin" : "Tenant Admin"}
+						</DropdownMenuTrigger>
 						<DropdownMenuContent align="end">
-							<DropdownMenuLabel>Switch Role</DropdownMenuLabel>
-							<DropdownMenuSeparator />
-							<DropdownMenuItem
-								onClick={() => {
-									setRole("vend_admin");
-									setTenantId(null);
-								}}
-							>
-								Vend Admin
-							</DropdownMenuItem>
-							<DropdownMenuSeparator />
-							<DropdownMenuLabel>Tenant Admin</DropdownMenuLabel>
-							{tenants?.map((t) => (
+							<DropdownMenuGroup>
+								<DropdownMenuLabel>Switch Role</DropdownMenuLabel>
+								<DropdownMenuSeparator />
 								<DropdownMenuItem
-									key={t._id}
 									onClick={() => {
-										setRole("tenant_admin");
-										setTenantId(t._id);
+										setRole("vend_admin");
+										setTenantId(null);
 									}}
 								>
-									{t.companyName}
+									Vend Admin
 								</DropdownMenuItem>
-							))}
-							{tenants?.length === 0 && (
-								<DropdownMenuItem disabled>No tenants yet</DropdownMenuItem>
-							)}
+							</DropdownMenuGroup>
+							<DropdownMenuSeparator />
+							<DropdownMenuGroup>
+								<DropdownMenuLabel>Tenant Admin</DropdownMenuLabel>
+								{tenants?.map((t) => (
+									<DropdownMenuItem
+										key={t._id}
+										onClick={() => {
+											setRole("tenant_admin");
+											setTenantId(t._id);
+										}}
+									>
+										{t.companyName}
+									</DropdownMenuItem>
+								))}
+								{tenants?.length === 0 && (
+									<DropdownMenuItem disabled>No tenants yet</DropdownMenuItem>
+								)}
+							</DropdownMenuGroup>
 						</DropdownMenuContent>
 					</DropdownMenu>
 					<ModeToggle />
