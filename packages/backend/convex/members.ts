@@ -32,7 +32,215 @@ function generateAccessCode(): string {
 	return code;
 }
 
-// --- Mutations ---
+// --- Auto method helper ---
+
+function computeAutoMethod(
+	email?: string,
+	phone?: string,
+): "email" | "phone" | "access_code" {
+	if (email) return "email";
+	if (phone) return "phone";
+	return "access_code";
+}
+
+// --- CRUD mutations ---
+
+export const create = mutation({
+	args: {
+		tenantId: v.id("tenants"),
+		passId: v.id("passes"),
+		name: v.string(),
+		email: v.optional(v.string()),
+		phone: v.optional(v.string()),
+	},
+	handler: async (ctx, args) => {
+		const pass = await ctx.db.get(args.passId);
+		if (!pass || pass.tenantId !== args.tenantId) {
+			return {
+				ok: false as const,
+				code: "INVALID_PASS",
+				message: "Pass not found or does not belong to this tenant",
+			};
+		}
+
+		const inviteAutoMethod = computeAutoMethod(args.email, args.phone);
+
+		const memberId = await ctx.db.insert("members", {
+			tenantId: args.tenantId,
+			passId: args.passId,
+			name: args.name,
+			email: args.email || undefined,
+			phone: args.phone || undefined,
+			status: "draft",
+			inviteAutoMethod,
+			createdAt: Date.now(),
+		});
+
+		return { ok: true as const, memberId };
+	},
+});
+
+export const update = mutation({
+	args: {
+		memberId: v.id("members"),
+		name: v.optional(v.string()),
+		email: v.optional(v.string()),
+		phone: v.optional(v.string()),
+	},
+	handler: async (ctx, { memberId, ...fields }) => {
+		const member = await ctx.db.get(memberId);
+		if (!member) {
+			return {
+				ok: false as const,
+				code: "NOT_FOUND",
+				message: "Member not found",
+			};
+		}
+		if (member.status !== "draft") {
+			return {
+				ok: false as const,
+				code: "INVALID_STATUS",
+				message: `Cannot edit: status is ${member.status}, expected draft`,
+			};
+		}
+
+		const updates: Record<string, string | undefined> = {};
+		if (fields.name !== undefined) updates.name = fields.name;
+		if (fields.email !== undefined) updates.email = fields.email || undefined;
+		if (fields.phone !== undefined) updates.phone = fields.phone || undefined;
+
+		// Recompute auto method if contact info changed
+		if (fields.email !== undefined || fields.phone !== undefined) {
+			const newEmail =
+				fields.email !== undefined ? fields.email || undefined : member.email;
+			const newPhone =
+				fields.phone !== undefined ? fields.phone || undefined : member.phone;
+			updates.inviteAutoMethod = computeAutoMethod(newEmail, newPhone);
+		}
+
+		await ctx.db.patch(memberId, updates);
+		return { ok: true as const, memberId };
+	},
+});
+
+export const remove = mutation({
+	args: { memberId: v.id("members") },
+	handler: async (ctx, { memberId }) => {
+		const member = await ctx.db.get(memberId);
+		if (!member) {
+			return {
+				ok: false as const,
+				code: "NOT_FOUND",
+				message: "Member not found",
+			};
+		}
+		if (member.status !== "draft") {
+			return {
+				ok: false as const,
+				code: "INVALID_STATUS",
+				message: `Cannot delete: status is ${member.status}, expected draft`,
+			};
+		}
+
+		await ctx.db.delete(memberId);
+		return { ok: true as const };
+	},
+});
+
+export const createBulk = mutation({
+	args: {
+		tenantId: v.id("tenants"),
+		passId: v.id("passes"),
+		rows: v.array(
+			v.object({
+				name: v.string(),
+				email: v.optional(v.string()),
+				phone: v.optional(v.string()),
+			}),
+		),
+	},
+	handler: async (ctx, args) => {
+		const pass = await ctx.db.get(args.passId);
+		if (!pass || pass.tenantId !== args.tenantId) {
+			return {
+				ok: false as const,
+				code: "INVALID_PASS",
+				message: "Pass not found or does not belong to this tenant",
+			};
+		}
+
+		// Load existing members for de-duplication
+		const existing = await ctx.db
+			.query("members")
+			.withIndex("by_pass", (q) => q.eq("passId", args.passId))
+			.collect();
+
+		const results: Array<{
+			index: number;
+			ok: boolean;
+			memberId?: string;
+			error?: string;
+			duplicate?: { duplicateOf: string; reason: "email" | "phone" };
+		}> = [];
+		let successCount = 0;
+		let failCount = 0;
+
+		for (let i = 0; i < args.rows.length; i++) {
+			const row = args.rows[i];
+
+			if (!row.name.trim()) {
+				results.push({ index: i, ok: false, error: "Name is required" });
+				failCount++;
+				continue;
+			}
+
+			// Check for duplicates against existing members
+			let duplicate:
+				| { duplicateOf: string; reason: "email" | "phone" }
+				| undefined;
+			if (row.email) {
+				const emailLower = row.email.toLowerCase();
+				const match = existing.find(
+					(m) => m.email && m.email.toLowerCase() === emailLower,
+				);
+				if (match) {
+					duplicate = { duplicateOf: match._id, reason: "email" };
+				}
+			}
+			if (!duplicate && row.phone) {
+				const match = existing.find((m) => m.phone === row.phone);
+				if (match) {
+					duplicate = { duplicateOf: match._id, reason: "phone" };
+				}
+			}
+
+			const inviteAutoMethod = computeAutoMethod(row.email, row.phone);
+
+			const memberId = await ctx.db.insert("members", {
+				tenantId: args.tenantId,
+				passId: args.passId,
+				name: row.name.trim(),
+				email: row.email || undefined,
+				phone: row.phone || undefined,
+				status: "draft",
+				inviteAutoMethod,
+				createdAt: Date.now(),
+			});
+
+			results.push({
+				index: i,
+				ok: true,
+				memberId,
+				...(duplicate ? { duplicate } : {}),
+			});
+			successCount++;
+		}
+
+		return { ok: true as const, results, successCount, failCount };
+	},
+});
+
+// --- Lifecycle mutations ---
 
 export const sendInvite = mutation({
 	args: { memberId: v.id("members") },
