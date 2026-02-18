@@ -26,6 +26,9 @@ alwaysApply: true
 - Shared types between frontend and Convex via Zod schemas that mirror Convex validators.
 - Small, focused components. Meaningful names. No god components.
 - Prefer Convex reactive queries (useQuery) for live data. No polling.
+- Server-shaped queries: Convex queries return screen-ready view models (joins + computed fields). UI renders, not orchestrates.
+- Typed errors on mutations with known failure modes (sendInvite, resendInvite, AI import): return `{ ok: false, code, message }` for expected failures. Throw only for unexpected/invariant failures.
+- Storybook: shared components must have stories for loading/empty/error + all status variants, not just happy path.
 - Mock auth via role switcher (Vend Admin / Tenant Admin), not real auth.
 - Tenant admin is a separate entity (tenantAdmins table), not inlined on tenants.
 - Access codes are unique per member and stable across resends unless explicitly regenerated.

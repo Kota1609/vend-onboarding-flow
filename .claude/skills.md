@@ -18,6 +18,7 @@
 - Index: by_tenant [tenantId]
 
 ### members
+- A membership/enrollment (person-in-pass), NOT a unique person. Same person can appear multiple times across passes or even within the same pass. De-dup is advisory (flag + let admin resolve), not a uniqueness constraint.
 - tenantId, passId, name, email?, phone?
 - status: "draft" | "invited" | "accepted" | "approved" | "rejected"
 - inviteAutoMethod: "email" | "phone" | "access_code" (computed from contact data)
@@ -87,6 +88,11 @@ Per tenant: aggregate across all passes
 - Hard duplicates: same email OR same phone (exact match, case-insensitive for email)
 - Soft duplicates: same normalized name (lowercase, trimmed) AND same pass OR same tenant
 - Flag both with warning, let admin resolve. Never auto-merge.
+
+## View Models (server-shaped queries)
+- `getTenantDashboard(tenantId)` → passes + per-pass progress + blockers + recent invite attempts
+- `getVendDashboard()` → tenant list + computed onboarding status + at-risk flags
+- `getPassMembers(passId)` → members + effectiveInviteMethod + duplicate flags + lastInviteAt
 
 ## UI Principles
 - Guided, step-based wizard for tenant admin

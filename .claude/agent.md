@@ -11,6 +11,8 @@ Prioritize: correctness, type-safety, real-time reactive UX, auditability, clean
 - Never write AI-extracted data to DB without human confirmation.
 - Enforce invite lifecycle transitions in mutations (no free-form status writes).
 - Prefer derived/computed progress from queries (avoid stored counters).
+- Server-side view models: queries return data shaped for the UI (joins + computed fields in Convex, not in React).
+- Typed error returns on sendInvite/resendInvite/AI import mutations for expected failures.
 
 ## Workflow
 1. Read docs/00-brief.md and docs/01-architecture.md before coding.
