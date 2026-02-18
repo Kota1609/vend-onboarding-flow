@@ -1,31 +1,88 @@
+import { api } from "@onboarding-flow/backend/convex/_generated/api";
 import { Link } from "@tanstack/react-router";
+import { useQuery } from "convex/react";
+import { useAuth } from "@/lib/auth-context";
 import { ModeToggle } from "./mode-toggle";
+import { Button } from "./ui/button";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuLabel,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from "./ui/dropdown-menu";
 
 export default function Header() {
-  const links = [
-    { to: "/", label: "Home" },
-  ] as const;
+	const { role, setRole, tenantId, setTenantId } = useAuth();
+	const tenants = useQuery(api.tenants.list);
 
-  return (
-    <div>
-      <div className="flex flex-row items-center justify-between px-2 py-1">
-        <nav className="flex gap-4 text-lg">
-          {links.map(({ to, label }) => {
-            return (
-              <Link
-                key={to}
-                to={to}
-              >
-                {label}
-              </Link>
-            );
-          })}
-        </nav>
-        <div className="flex items-center gap-2">
-          <ModeToggle />
-        </div>
-      </div>
-      <hr />
-    </div>
-  );
+	return (
+		<div>
+			<div className="flex flex-row items-center justify-between px-4 py-2">
+				<nav className="flex items-center gap-6">
+					<Link to="/" className="font-semibold text-sm">
+						Vend Park
+					</Link>
+					{role === "vend_admin" && (
+						<Link
+							to="/tenants"
+							className="text-muted-foreground text-sm hover:text-foreground"
+						>
+							Tenants
+						</Link>
+					)}
+					{role === "tenant_admin" && tenantId && (
+						<Link
+							to="/onboarding"
+							className="text-muted-foreground text-sm hover:text-foreground"
+						>
+							Onboarding
+						</Link>
+					)}
+				</nav>
+				<div className="flex items-center gap-3">
+					<DropdownMenu>
+						<DropdownMenuTrigger
+							render={
+								<Button variant="outline" size="sm">
+									{role === "vend_admin" ? "Vend Admin" : "Tenant Admin"}
+								</Button>
+							}
+						/>
+						<DropdownMenuContent align="end">
+							<DropdownMenuLabel>Switch Role</DropdownMenuLabel>
+							<DropdownMenuSeparator />
+							<DropdownMenuItem
+								onClick={() => {
+									setRole("vend_admin");
+									setTenantId(null);
+								}}
+							>
+								Vend Admin
+							</DropdownMenuItem>
+							<DropdownMenuSeparator />
+							<DropdownMenuLabel>Tenant Admin</DropdownMenuLabel>
+							{tenants?.map((t) => (
+								<DropdownMenuItem
+									key={t._id}
+									onClick={() => {
+										setRole("tenant_admin");
+										setTenantId(t._id);
+									}}
+								>
+									{t.companyName}
+								</DropdownMenuItem>
+							))}
+							{tenants?.length === 0 && (
+								<DropdownMenuItem disabled>No tenants yet</DropdownMenuItem>
+							)}
+						</DropdownMenuContent>
+					</DropdownMenu>
+					<ModeToggle />
+				</div>
+			</div>
+			<hr />
+		</div>
+	);
 }
