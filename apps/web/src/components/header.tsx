@@ -26,12 +26,20 @@ export default function Header() {
 						Vend Park
 					</Link>
 					{role === "vend_admin" && (
-						<Link
-							to="/tenants"
-							className="text-muted-foreground text-sm hover:text-foreground"
-						>
-							Tenants
-						</Link>
+						<>
+							<Link
+								to="/tenants"
+								className="text-muted-foreground text-sm hover:text-foreground"
+							>
+								Tenants
+							</Link>
+							<Link
+								to="/billing"
+								className="text-muted-foreground text-sm hover:text-foreground"
+							>
+								Billing
+							</Link>
+						</>
 					)}
 					{role === "tenant_admin" && tenantId && (
 						<Link
@@ -44,7 +52,9 @@ export default function Header() {
 				</nav>
 				<div className="flex items-center gap-3">
 					<DropdownMenu>
-						<DropdownMenuTrigger render={<Button variant="outline" size="sm" />}>
+						<DropdownMenuTrigger
+							render={<Button variant="outline" size="sm" />}
+						>
 							{role === "vend_admin" ? "Vend Admin" : "Tenant Admin"}
 						</DropdownMenuTrigger>
 						<DropdownMenuContent align="end">

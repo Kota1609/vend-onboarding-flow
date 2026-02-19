@@ -16,12 +16,18 @@ interface StatusBreakdown {
 	rejected: number;
 }
 
+const BILLING_LABELS: Record<string, string> = {
+	recurring: "Recurring",
+	usage_based: "Usage-based",
+};
+
 export interface PassCardProps {
 	name: string;
 	description: string;
 	targetMemberCount: number;
 	memberCount: number;
 	statusBreakdown: StatusBreakdown;
+	billingType?: "recurring" | "usage_based";
 	onEdit?: () => void;
 	onDelete?: () => void;
 }
@@ -32,6 +38,7 @@ export function PassCard({
 	targetMemberCount,
 	memberCount,
 	statusBreakdown,
+	billingType,
 	onEdit,
 	onDelete,
 }: PassCardProps) {
@@ -105,6 +112,11 @@ export function PassCard({
 						)}
 						{statusBreakdown.rejected > 0 && (
 							<span>{statusBreakdown.rejected} rejected</span>
+						)}
+						{billingType && (
+							<span className="rounded-full border border-blue-500/30 bg-blue-500/10 px-2 py-0.5 text-blue-700 dark:text-blue-400">
+								{BILLING_LABELS[billingType]}
+							</span>
 						)}
 					</div>
 				</div>

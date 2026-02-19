@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { billingType } from "./schema";
 
 export const create = mutation({
 	args: {
@@ -26,6 +27,7 @@ export const update = mutation({
 		name: v.optional(v.string()),
 		description: v.optional(v.string()),
 		targetMemberCount: v.optional(v.number()),
+		billingType: v.optional(billingType),
 	},
 	handler: async (ctx, { passId, ...fields }) => {
 		const pass = await ctx.db.get(passId);
@@ -43,6 +45,8 @@ export const update = mutation({
 			updates.description = fields.description;
 		if (fields.targetMemberCount !== undefined)
 			updates.targetMemberCount = fields.targetMemberCount;
+		if (fields.billingType !== undefined)
+			updates.billingType = fields.billingType;
 
 		await ctx.db.patch(passId, updates);
 		return { ok: true as const, passId };

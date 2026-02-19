@@ -284,6 +284,9 @@ function StepDefinePasses({
 						targetMemberCount={pass.targetMemberCount}
 						memberCount={pass.memberCount}
 						statusBreakdown={pass.statusBreakdown}
+						billingType={
+							pass.billingType as "recurring" | "usage_based" | undefined
+						}
 						onEdit={() => setEditingPassId(pass._id)}
 						onDelete={() => handleDelete(pass._id)}
 					/>
