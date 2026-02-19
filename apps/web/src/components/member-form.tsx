@@ -1,7 +1,13 @@
-import { useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+	type MemberFormInput,
+	type MemberFormValues,
+	memberFormSchema,
+} from "@/lib/schemas";
 
 interface MemberFormProps {
 	initialValues?: {
@@ -24,66 +30,56 @@ export function MemberForm({
 	onCancel,
 	submitLabel = "Add Member",
 }: MemberFormProps) {
-	const [isSubmitting, setIsSubmitting] = useState(false);
+	const {
+		register,
+		handleSubmit,
+		reset,
+		formState: { errors, isSubmitting },
+	} = useForm<MemberFormInput, unknown, MemberFormValues>({
+		resolver: zodResolver(memberFormSchema),
+		defaultValues: {
+			name: initialValues?.name ?? "",
+			email: initialValues?.email ?? "",
+			phone: initialValues?.phone ?? "",
+		},
+	});
 
-	async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-		e.preventDefault();
-		setIsSubmitting(true);
-
-		const form = e.currentTarget;
-		const formData = new FormData(form);
-
-		const name = (formData.get("name") as string).trim();
-		const email = (formData.get("email") as string).trim();
-		const phone = (formData.get("phone") as string).trim();
-
-		if (!name) {
-			setIsSubmitting(false);
-			return;
-		}
-
-		try {
-			await onSubmit({
-				name,
-				email: email || undefined,
-				phone: phone || undefined,
-			});
-			if (!initialValues) form.reset();
-		} finally {
-			setIsSubmitting(false);
-		}
+	async function onValid(values: MemberFormValues) {
+		await onSubmit(values);
+		if (!initialValues) reset();
 	}
 
 	return (
-		<form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2">
+		<form
+			onSubmit={handleSubmit(onValid)}
+			className="grid gap-4 sm:grid-cols-2"
+		>
 			<div className="grid gap-1.5 sm:col-span-2">
 				<Label htmlFor="member-name">Name *</Label>
-				<Input
-					id="member-name"
-					name="name"
-					placeholder="Jane Doe"
-					defaultValue={initialValues?.name}
-					required
-				/>
+				<Input id="member-name" placeholder="Jane Doe" {...register("name")} />
+				{errors.name && (
+					<p className="text-destructive text-xs">{errors.name.message}</p>
+				)}
 			</div>
 			<div className="grid gap-1.5">
 				<Label htmlFor="member-email">Email</Label>
 				<Input
 					id="member-email"
-					name="email"
 					type="email"
 					placeholder="jane@example.com"
-					defaultValue={initialValues?.email}
+					{...register("email")}
 				/>
+				{errors.email && (
+					<p className="text-destructive text-xs">{errors.email.message}</p>
+				)}
 			</div>
 			<div className="grid gap-1.5">
 				<Label htmlFor="member-phone">Phone</Label>
 				<Input
 					id="member-phone"
-					name="phone"
 					type="tel"
 					placeholder="+1 555-0100"
-					defaultValue={initialValues?.phone}
+					{...register("phone")}
 				/>
 			</div>
 			<p className="text-muted-foreground text-xs sm:col-span-2">

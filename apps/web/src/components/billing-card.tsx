@@ -61,18 +61,18 @@ export function BillingCard({
 									currentBillingType === "recurring" ? "default" : "ghost"
 								}
 								size="xs"
-								disabled={currentBillingType === "recurring" || isLoading}
-								onClick={() => onSetBillingType("recurring")}
-							>
-								Recurring
-							</Button>
-							<Button
-								variant={
-									currentBillingType === "usage_based" ? "default" : "ghost"
-								}
-								size="xs"
-								disabled={currentBillingType === "usage_based" || isLoading}
-								onClick={() => onSetBillingType("usage_based")}
+							disabled={isLoading || currentBillingType === "recurring"}
+							onClick={() => onSetBillingType("recurring")}
+						>
+							Recurring
+						</Button>
+						<Button
+							variant={
+								currentBillingType === "usage_based" ? "default" : "ghost"
+							}
+							size="xs"
+							disabled={isLoading || currentBillingType === "usage_based"}
+							onClick={() => onSetBillingType("usage_based")}
 							>
 								Usage-based
 							</Button>

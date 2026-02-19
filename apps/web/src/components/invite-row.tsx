@@ -1,55 +1,12 @@
 import { QRCodeSVG } from "qrcode.react";
 import { Button } from "@/components/ui/button";
+import {
+	formatRelativeTime,
+	METHOD_LABELS,
+	STATUS_CONFIG,
+} from "@/lib/constants";
+import type { InviteMethod, MemberStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
-
-type MemberStatus = "draft" | "invited" | "accepted" | "approved" | "rejected";
-type InviteMethod = "email" | "phone" | "access_code";
-
-const STATUS_CONFIG: Record<
-	MemberStatus,
-	{ label: string; className: string }
-> = {
-	draft: {
-		label: "Draft",
-		className: "bg-muted text-muted-foreground border-border",
-	},
-	invited: {
-		label: "Invited",
-		className:
-			"bg-blue-500/10 text-blue-700 border-blue-500/30 dark:text-blue-400",
-	},
-	accepted: {
-		label: "Accepted",
-		className:
-			"bg-yellow-500/10 text-yellow-700 border-yellow-500/30 dark:text-yellow-400",
-	},
-	approved: {
-		label: "Approved",
-		className:
-			"bg-green-500/10 text-green-700 border-green-500/30 dark:text-green-400",
-	},
-	rejected: {
-		label: "Rejected",
-		className: "bg-red-500/10 text-red-700 border-red-500/30 dark:text-red-400",
-	},
-};
-
-const METHOD_LABELS: Record<InviteMethod, string> = {
-	email: "Email",
-	phone: "Phone",
-	access_code: "Code",
-};
-
-function formatRelativeTime(timestamp: number): string {
-	const diff = Date.now() - timestamp;
-	const minutes = Math.floor(diff / 60_000);
-	if (minutes < 1) return "just now";
-	if (minutes < 60) return `${minutes}m ago`;
-	const hours = Math.floor(minutes / 60);
-	if (hours < 24) return `${hours}h ago`;
-	const days = Math.floor(hours / 24);
-	return `${days}d ago`;
-}
 
 export interface InviteRowProps {
 	name: string;
@@ -123,7 +80,7 @@ export function InviteRow({
 						))}
 					</div>
 				) : (
-					<span className="inline-flex items-center border border-yellow-500/30 bg-yellow-500/10 px-1.5 py-0.5 text-xs text-yellow-700 dark:text-yellow-400">
+					<span className="inline-flex items-center rounded-full border border-border bg-muted px-1.5 py-0.5 text-muted-foreground text-xs">
 						{METHOD_LABELS[effectiveMethod]}
 					</span>
 				)}
@@ -131,7 +88,7 @@ export function InviteRow({
 				{/* Status badge */}
 				<span
 					className={cn(
-						"inline-flex items-center border px-1.5 py-0.5 text-xs",
+						"inline-flex items-center rounded-full border px-1.5 py-0.5 text-xs",
 						statusConfig.className,
 					)}
 				>

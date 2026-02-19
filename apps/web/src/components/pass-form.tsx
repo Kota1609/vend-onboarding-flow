@@ -1,19 +1,17 @@
-import { useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+	type PassFormInput,
+	type PassFormValues,
+	passFormSchema,
+} from "@/lib/schemas";
 
 interface PassFormProps {
-	initialValues?: {
-		name: string;
-		description: string;
-		targetMemberCount: number;
-	};
-	onSubmit: (values: {
-		name: string;
-		description: string;
-		targetMemberCount: number;
-	}) => Promise<void>;
+	initialValues?: PassFormValues;
+	onSubmit: (values: PassFormValues) => Promise<void>;
 	onCancel?: () => void;
 	submitLabel?: string;
 }
@@ -24,65 +22,68 @@ export function PassForm({
 	onCancel,
 	submitLabel = "Create Pass",
 }: PassFormProps) {
-	const [isSubmitting, setIsSubmitting] = useState(false);
+	const {
+		register,
+		handleSubmit,
+		reset,
+		formState: { errors, isSubmitting },
+	} = useForm<PassFormInput, unknown, PassFormValues>({
+		resolver: zodResolver(passFormSchema),
+		defaultValues: initialValues ?? {
+			name: "",
+			description: "",
+			targetMemberCount: 1,
+		},
+	});
 
-	async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-		e.preventDefault();
-		setIsSubmitting(true);
-
-		const form = e.currentTarget;
-		const formData = new FormData(form);
-
-		const name = formData.get("name") as string;
-		const description = formData.get("description") as string;
-		const targetMemberCount = Number(formData.get("targetMemberCount"));
-
-		if (!name || !description || targetMemberCount < 1) {
-			setIsSubmitting(false);
-			return;
-		}
-
-		try {
-			await onSubmit({ name, description, targetMemberCount });
-			if (!initialValues) form.reset();
-		} finally {
-			setIsSubmitting(false);
-		}
+	async function onValid(values: PassFormValues) {
+		await onSubmit(values);
+		if (!initialValues) reset();
 	}
 
 	return (
-		<form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2">
+		<form
+			onSubmit={handleSubmit(onValid)}
+			className="grid gap-4 sm:grid-cols-2"
+		>
 			<div className="grid gap-1.5">
 				<Label htmlFor="pass-name">Pass Name *</Label>
 				<Input
 					id="pass-name"
-					name="name"
 					placeholder="Executive Reserved"
-					defaultValue={initialValues?.name}
-					required
+					{...register("name")}
 				/>
+				{errors.name && (
+					<p className="text-destructive text-xs">{errors.name.message}</p>
+				)}
 			</div>
 			<div className="grid gap-1.5">
 				<Label htmlFor="pass-target">Target Member Count *</Label>
 				<Input
 					id="pass-target"
-					name="targetMemberCount"
 					type="number"
 					min={1}
 					placeholder="10"
-					defaultValue={initialValues?.targetMemberCount}
-					required
+					{...register("targetMemberCount")}
 				/>
+				{errors.targetMemberCount && (
+					<p className="text-destructive text-xs">
+						{errors.targetMemberCount.message}
+					</p>
+				)}
 			</div>
 			<div className="grid gap-1.5 sm:col-span-2">
 				<Label htmlFor="pass-description">Description *</Label>
 				<Input
 					id="pass-description"
-					name="description"
 					placeholder="Reserved spots for C-suite and senior leadership"
-					defaultValue={initialValues?.description}
-					required
+					{...register("description")}
 				/>
+				{errors.description && (
+					<p className="text-destructive text-xs">
+						{errors.description.message}
+					</p>
+				)}
 			</div>
 			<div className="flex gap-2 sm:col-span-2">
 				<Button type="submit" disabled={isSubmitting}>

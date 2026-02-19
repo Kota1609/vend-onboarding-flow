@@ -2,35 +2,11 @@ import { api } from "@onboarding-flow/backend/convex/_generated/api";
 import type { Id } from "@onboarding-flow/backend/convex/_generated/dataModel";
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "convex/react";
+import { PipelineFlow } from "@/components/pipeline-flow";
 import { StatCard } from "@/components/stat-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-
-function PipelineStage({
-	count,
-	label,
-	variant,
-}: {
-	count: number;
-	label: string;
-	variant?: "green" | "red";
-}) {
-	return (
-		<div
-			className={cn(
-				"flex flex-col items-center rounded-none border px-4 py-2",
-				variant === "green" &&
-					"border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-400",
-				variant === "red" &&
-					"border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-400",
-			)}
-		>
-			<span className="font-semibold text-lg">{count}</span>
-			<span className="text-muted-foreground text-xs">{label}</span>
-		</div>
-	);
-}
 
 export function TenantAdminDashboard({
 	tenantId,
@@ -76,6 +52,7 @@ export function TenantAdminDashboard({
 							No passes yet.{" "}
 							<Link
 								to="/onboarding"
+								search={{ step: 0 }}
 								className="underline hover:text-foreground"
 							>
 								Go to Onboarding
@@ -112,23 +89,30 @@ export function TenantAdminDashboard({
 	);
 	const passesNeedingMembers = passes.filter((p) => p.memberCount === 0).length;
 
-	const pendingActions: { label: string; to: string }[] = [];
+	const pendingActions: {
+		label: string;
+		to: string;
+		search: { step: number };
+	}[] = [];
 	if (totalAccepted > 0) {
 		pendingActions.push({
 			label: `${totalAccepted} member${totalAccepted === 1 ? "" : "s"} need your approval`,
 			to: "/onboarding",
+			search: { step: 3 },
 		});
 	}
 	if (totalDraft > 0) {
 		pendingActions.push({
 			label: `${totalDraft} invite${totalDraft === 1 ? "" : "s"} ready to send`,
 			to: "/onboarding",
+			search: { step: 2 },
 		});
 	}
 	if (passesNeedingMembers > 0) {
 		pendingActions.push({
 			label: `${passesNeedingMembers} pass${passesNeedingMembers === 1 ? "" : "es"} need members`,
 			to: "/onboarding",
+			search: { step: 1 },
 		});
 	}
 
@@ -161,6 +145,7 @@ export function TenantAdminDashboard({
 								<li key={item.label}>
 									<Link
 										to={item.to}
+										search={item.search}
 										className="text-sm underline hover:text-foreground"
 									>
 										{item.label}
@@ -182,29 +167,13 @@ export function TenantAdminDashboard({
 					<CardTitle>Member Pipeline</CardTitle>
 				</CardHeader>
 				<CardContent>
-					<div className="flex flex-wrap items-center gap-2">
-						<PipelineStage count={totalDraft} label="Draft" />
-						<span className="text-muted-foreground">→</span>
-						<PipelineStage count={totalInvited} label="Invited" />
-						<span className="text-muted-foreground">→</span>
-						<PipelineStage count={totalAccepted} label="Accepted" />
-						<span className="text-muted-foreground">→</span>
-						<PipelineStage
-							count={totalApproved}
-							label="Approved"
-							variant="green"
-						/>
-						{totalRejected > 0 && (
-							<>
-								<span className="text-muted-foreground">|</span>
-								<PipelineStage
-									count={totalRejected}
-									label="Rejected"
-									variant="red"
-								/>
-							</>
-						)}
-					</div>
+					<PipelineFlow
+						draft={totalDraft}
+						invited={totalInvited}
+						accepted={totalAccepted}
+						approved={totalApproved}
+						rejected={totalRejected}
+					/>
 				</CardContent>
 			</Card>
 
@@ -230,7 +199,7 @@ export function TenantAdminDashboard({
 									<CardTitle>{pass.name}</CardTitle>
 									<span
 										className={cn(
-											"inline-flex items-center rounded-none border px-2 py-0.5 font-medium text-xs",
+											"inline-flex items-center rounded-full border px-2 py-0.5 font-medium text-xs",
 											progressPercent === 100
 												? "border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-400"
 												: "border-border bg-muted text-muted-foreground",
@@ -250,7 +219,7 @@ export function TenantAdminDashboard({
 											</span>
 											<span className="font-medium">{progressPercent}%</span>
 										</div>
-										<div className="h-1.5 w-full overflow-hidden bg-muted">
+										<div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
 											<div
 												className={cn(
 													"h-full transition-all",

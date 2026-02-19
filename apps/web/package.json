@@ -19,6 +19,7 @@
     "@onboarding-flow/env": "workspace:*",
     "@tailwindcss/vite": "^4.0.15",
     "@tanstack/react-router": "^1.141.1",
+    "@xyflow/react": "^12.10.0",
     "ai": "^6.0.91",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

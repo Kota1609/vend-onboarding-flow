@@ -85,7 +85,7 @@ export function VendAdminDashboard() {
 		} else {
 			setRole("tenant_admin");
 			setTenantId(tenant._id);
-			navigate({ to: "/onboarding" });
+			navigate({ to: "/onboarding", search: { step: 0 } });
 		}
 	}
 
@@ -184,7 +184,7 @@ export function VendAdminDashboard() {
 											</span>
 											<span className="font-medium">{progressPercent}%</span>
 										</div>
-										<div className="h-1.5 w-full overflow-hidden bg-muted">
+										<div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
 											<div
 												className={cn(
 													"h-full transition-all",

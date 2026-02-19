@@ -8,6 +8,7 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
+import { csvRowSchema } from "@/lib/schemas";
 
 interface MemberRow {
 	name: string;
@@ -53,17 +54,18 @@ function validateRow(raw: Record<string, string>): {
 	row: MemberRow;
 	errors: string[];
 } {
-	const errors: string[] = [];
-	const name = (raw.name || "").trim();
-	const email = (raw.email || "").trim();
-	const phone = (raw.phone || "").trim();
-
-	if (!name) errors.push("Name is required");
-
-	return {
-		row: { name, email: email || undefined, phone: phone || undefined },
-		errors,
-	};
+	const result = csvRowSchema.safeParse({
+		name: (raw.name || "").trim(),
+		email: (raw.email || "").trim(),
+		phone: (raw.phone || "").trim(),
+	});
+	if (!result.success) {
+		return {
+			row: { name: (raw.name || "").trim() },
+			errors: result.error.issues.map((i) => i.message),
+		};
+	}
+	return { row: result.data, errors: [] };
 }
 
 function checkDuplicate(

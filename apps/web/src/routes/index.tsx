@@ -21,7 +21,7 @@ function HomeComponent() {
 	return (
 		<div className="mx-auto max-w-5xl p-6">
 			<p className="text-muted-foreground">
-				Select a tenant from the header to view your dashboard.
+				Select a tenant from the sidebar to view your dashboard.
 			</p>
 		</div>
 	);

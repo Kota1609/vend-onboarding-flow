@@ -6,6 +6,7 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
+import type { BillingType } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 interface StatusBreakdown {
@@ -16,7 +17,7 @@ interface StatusBreakdown {
 	rejected: number;
 }
 
-const BILLING_LABELS: Record<string, string> = {
+const BILLING_LABELS: Record<BillingType, string> = {
 	recurring: "Recurring",
 	usage_based: "Usage-based",
 };
@@ -27,7 +28,7 @@ export interface PassCardProps {
 	targetMemberCount: number;
 	memberCount: number;
 	statusBreakdown: StatusBreakdown;
-	billingType?: "recurring" | "usage_based";
+	billingType?: BillingType;
 	onEdit?: () => void;
 	onDelete?: () => void;
 }
@@ -87,7 +88,7 @@ export function PassCard({
 							</span>
 							<span className="font-medium">{progressPercent}%</span>
 						</div>
-						<div className="h-1.5 w-full overflow-hidden bg-muted">
+						<div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
 							<div
 								className={cn(
 									"h-full transition-all",
@@ -114,7 +115,7 @@ export function PassCard({
 							<span>{statusBreakdown.rejected} rejected</span>
 						)}
 						{billingType && (
-							<span className="rounded-full border border-blue-500/30 bg-blue-500/10 px-2 py-0.5 text-blue-700 dark:text-blue-400">
+							<span className="rounded-full border border-border bg-muted px-2 py-0.5 text-muted-foreground">
 								{BILLING_LABELS[billingType]}
 							</span>
 						)}

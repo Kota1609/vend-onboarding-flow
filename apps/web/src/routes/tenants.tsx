@@ -1,7 +1,8 @@
+import { zodResolver } from "@hookform/resolvers/zod";
 import { api } from "@onboarding-flow/backend/convex/_generated/api";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery } from "convex/react";
-import { useState } from "react";
+import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { OnboardingStatusBadge } from "@/components/onboarding-status-badge";
 import { Button } from "@/components/ui/button";
@@ -16,6 +17,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/lib/auth-context";
+import {
+	type TenantInviteInput,
+	type TenantInviteValues,
+	tenantInviteSchema,
+} from "@/lib/schemas";
 
 export const Route = createFileRoute("/tenants")({
 	component: TenantsPage,
@@ -52,34 +58,29 @@ function TenantsPage() {
 
 function TenantInviteForm() {
 	const createTenant = useMutation(api.tenants.create);
-	const [isSubmitting, setIsSubmitting] = useState(false);
 
-	async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-		e.preventDefault();
-		setIsSubmitting(true);
+	const {
+		register,
+		handleSubmit,
+		reset,
+		formState: { errors, isSubmitting },
+	} = useForm<TenantInviteInput, unknown, TenantInviteValues>({
+		resolver: zodResolver(tenantInviteSchema),
+		defaultValues: {
+			companyName: "",
+			adminName: "",
+			adminEmail: "",
+			adminPhone: "",
+		},
+	});
 
-		const form = e.currentTarget;
-		const formData = new FormData(form);
-
-		const companyName = formData.get("companyName") as string;
-		const adminName = formData.get("adminName") as string;
-		const adminEmail = (formData.get("adminEmail") as string) || undefined;
-		const adminPhone = (formData.get("adminPhone") as string) || undefined;
-
-		if (!companyName || !adminName) {
-			toast.error("Company name and admin name are required.");
-			setIsSubmitting(false);
-			return;
-		}
-
+	async function onValid(values: TenantInviteValues) {
 		try {
-			await createTenant({ companyName, adminName, adminEmail, adminPhone });
-			toast.success(`Invited ${companyName} successfully.`);
-			form.reset();
+			await createTenant(values);
+			toast.success(`Invited ${values.companyName} successfully.`);
+			reset();
 		} catch {
 			toast.error("Failed to create tenant.");
-		} finally {
-			setIsSubmitting(false);
 		}
 	}
 
@@ -92,41 +93,57 @@ function TenantInviteForm() {
 				</CardDescription>
 			</CardHeader>
 			<CardContent>
-				<form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2">
+				<form
+					onSubmit={handleSubmit(onValid)}
+					className="grid gap-4 sm:grid-cols-2"
+				>
 					<div className="grid gap-1.5">
 						<Label htmlFor="companyName">Company Name *</Label>
 						<Input
 							id="companyName"
-							name="companyName"
 							placeholder="Acme Corp"
-							required
+							{...register("companyName")}
 						/>
+						{errors.companyName && (
+							<p className="text-destructive text-xs">
+								{errors.companyName.message}
+							</p>
+						)}
 					</div>
 					<div className="grid gap-1.5">
 						<Label htmlFor="adminName">Admin Name *</Label>
 						<Input
 							id="adminName"
-							name="adminName"
 							placeholder="Sarah Chen"
-							required
+							{...register("adminName")}
 						/>
+						{errors.adminName && (
+							<p className="text-destructive text-xs">
+								{errors.adminName.message}
+							</p>
+						)}
 					</div>
 					<div className="grid gap-1.5">
 						<Label htmlFor="adminEmail">Admin Email</Label>
 						<Input
 							id="adminEmail"
-							name="adminEmail"
 							type="email"
 							placeholder="sarah@acme.com"
+							{...register("adminEmail")}
 						/>
+						{errors.adminEmail && (
+							<p className="text-destructive text-xs">
+								{errors.adminEmail.message}
+							</p>
+						)}
 					</div>
 					<div className="grid gap-1.5">
 						<Label htmlFor="adminPhone">Admin Phone</Label>
 						<Input
 							id="adminPhone"
-							name="adminPhone"
 							type="tel"
 							placeholder="+1-555-0101"
+							{...register("adminPhone")}
 						/>
 					</div>
 					<div className="sm:col-span-2">
@@ -175,7 +192,7 @@ function TenantList() {
 					onClick={() => {
 						setRole("tenant_admin");
 						setTenantId(tenant._id);
-						navigate({ to: "/onboarding" });
+						navigate({ to: "/onboarding", search: { step: 0 } });
 					}}
 				>
 					<CardHeader>
