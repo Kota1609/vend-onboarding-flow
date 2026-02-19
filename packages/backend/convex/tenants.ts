@@ -53,16 +53,28 @@ export const list = query({
 						totalMembers: 0,
 						approvedMembers: 0,
 						totalTarget: 0,
+						draftMembers: 0,
+						invitedMembers: 0,
+						acceptedMembers: 0,
+						rejectedMembers: 0,
+						billingConfigured: 0,
+						blockers: ["No passes created"],
 					};
 				}
 
 				let totalMembers = 0;
 				let approvedMembers = 0;
 				let totalTarget = 0;
+				let draftMembers = 0;
+				let invitedMembers = 0;
+				let acceptedMembers = 0;
+				let rejectedMembers = 0;
+				let billingConfigured = 0;
 				let allComplete = true;
 
 				for (const pass of passes) {
 					totalTarget += pass.targetMemberCount;
+					if (pass.billingType) billingConfigured++;
 
 					const members = await ctx.db
 						.query("members")
@@ -70,12 +82,19 @@ export const list = query({
 						.collect();
 
 					totalMembers += members.length;
-					const approved = members.filter(
-						(m) => m.status === "approved",
-					).length;
-					approvedMembers += approved;
 
-					if (approved < pass.targetMemberCount) {
+					let passApproved = 0;
+					for (const m of members) {
+						if (m.status === "approved") {
+							approvedMembers++;
+							passApproved++;
+						} else if (m.status === "draft") draftMembers++;
+						else if (m.status === "invited") invitedMembers++;
+						else if (m.status === "accepted") acceptedMembers++;
+						else if (m.status === "rejected") rejectedMembers++;
+					}
+
+					if (passApproved < pass.targetMemberCount) {
 						allComplete = false;
 					}
 				}
@@ -90,6 +109,18 @@ export const list = query({
 					onboardingStatus = "in_progress";
 				}
 
+				const blockers: string[] = [];
+				if (totalTarget === 0) blockers.push("Targets not set");
+				if (totalMembers === 0) blockers.push("No members added");
+				if (acceptedMembers > 0)
+					blockers.push(
+						`${acceptedMembers} member${acceptedMembers === 1 ? "" : "s"} awaiting approval`,
+					);
+				if (billingConfigured < passes.length)
+					blockers.push(
+						`${passes.length - billingConfigured} pass${passes.length - billingConfigured === 1 ? "" : "es"} need billing configured`,
+					);
+
 				return {
 					...tenant,
 					admin,
@@ -98,6 +129,12 @@ export const list = query({
 					totalMembers,
 					approvedMembers,
 					totalTarget,
+					draftMembers,
+					invitedMembers,
+					acceptedMembers,
+					rejectedMembers,
+					billingConfigured,
+					blockers,
 				};
 			}),
 		);

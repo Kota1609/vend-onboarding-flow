@@ -25,6 +25,12 @@ export default function Header() {
 					<Link to="/" className="font-semibold text-sm">
 						Vend Park
 					</Link>
+					<Link
+						to="/"
+						className="text-muted-foreground text-sm hover:text-foreground"
+					>
+						Dashboard
+					</Link>
 					{role === "vend_admin" && (
 						<>
 							<Link
