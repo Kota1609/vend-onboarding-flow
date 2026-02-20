@@ -46,7 +46,7 @@ function OnboardingPage() {
 	}
 
 	return (
-		<div className="mx-auto max-w-4xl p-6">
+		<div className="p-6">
 			<div className="mb-8">
 				<h1 className="font-bold text-2xl">Onboarding</h1>
 				<p className="mt-1 text-muted-foreground">
@@ -78,7 +78,9 @@ function OnboardingPage() {
 					Back
 				</Button>
 				<Button
-					onClick={() => goToStep(Math.min(STEPS.length - 1, currentStep + 1))}
+					onClick={() =>
+						goToStep(Math.min(STEPS.length - 1, currentStep + 1))
+					}
 					disabled={currentStep === STEPS.length - 1}
 				>
 					Next

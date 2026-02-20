@@ -5,6 +5,7 @@ import {
 } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import { AppSidebar } from "@/components/app-sidebar";
+import { CopilotPanel } from "@/components/copilot-panel";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Button } from "@/components/ui/button";
@@ -52,17 +53,22 @@ function RootComponent() {
 				disableTransitionOnChange
 				storageKey="vite-ui-theme"
 			>
-				<div className="grid h-svh grid-cols-[auto_1fr]">
+				<div className="flex h-svh">
 					<AppSidebar />
-					<main className="overflow-auto">
+					<main className="min-w-0 flex-1 overflow-auto">
 						<ErrorBoundary>
 							<Outlet />
 						</ErrorBoundary>
 					</main>
+					<div className="shrink-0 bg-muted/30">
+						<ErrorBoundary>
+							<CopilotPanel />
+						</ErrorBoundary>
+					</div>
 				</div>
 				<Toaster />
 			</ThemeProvider>
-			<TanStackRouterDevtools position="bottom-left" />
+			{/* <TanStackRouterDevtools position="bottom-left" /> */}
 		</>
 	);
 }
