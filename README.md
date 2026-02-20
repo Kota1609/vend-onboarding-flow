@@ -2,6 +2,8 @@
 
 A guided onboarding flow that enables Vend Admins and Tenant Admins to collaboratively onboard all pass members for a parking facility before go-live.
 
+**[Video Walkthrough (Loom)](https://www.loom.com/share/36d0c69553b84fe09f9e6a14d27de0d9)**
+
 ## Quick Start
 
 ### Prerequisites
@@ -70,6 +72,8 @@ packages/env/         Environment variable validation (Zod)
 | `members` | Individuals assigned to passes, with lifecycle status |
 | `inviteAttempts` | Audit trail of all invite sends |
 | `importBatches` / `importRows` | AI document import staging area |
+| `setupSuggestions` | AI-extracted pass type suggestions from documents |
+| `copilotLog` | Observability log for all copilot requests |
 
 ### Member Lifecycle
 
@@ -121,11 +125,21 @@ Upload or paste any document (PDF, CSV, Excel, free-text, images) and the system
 
 When uploading CSV files with non-standard headers, the system uses AI to suggest column mappings (e.g., mapping "Full Name" to `name`, "E-mail Address" to `email`). Each suggestion includes a confidence score and reasoning. The admin can accept, adjust, or skip AI suggestions and use raw headers instead.
 
-### Onboarding Assistant
+### AI Copilot
 
-A floating chat panel (bottom-right) available to tenant admins. Ask natural language questions about onboarding progress, blockers, and member status. The assistant queries real-time data from passes and members to provide accurate, contextual answers.
+A persistent chat panel that can both answer questions and take actions — built with the Vercel AI SDK's `tool()` and `stepCountIs()` for multi-step tool calling.
 
-Quick actions: "Who hasn't been invited?", "Show pass progress", "Any blockers?"
+**Key architecture:**
+- **Proposal-then-confirm:** Write tools return a proposal card with a summary. Nothing mutates until the admin clicks "Confirm & Execute."
+- **Step-filtered tools:** The backend only gives Claude tools relevant to the current wizard step (pass tools on Step 0, member tools on Step 1, invite tools on Step 2, approval tools on Step 3).
+- **Ambient state injection:** Pass counts, member statuses, and blockers are pre-loaded into the system prompt so basic questions answer instantly without tool calls.
+- **Multi-step chaining:** Claude can chain up to 8 tool calls per message (e.g., resolve a pass name → check draft count → propose sending invites).
+
+**Tenant Admin tools (6 read + 2-3 write per step):** create/edit/delete passes, add/delete members, send/resend invites, change invite method, approve/reject members.
+
+**Vend Admin tools (4 read + 5 write):** create tenants, configure billing, view cross-tenant progress, mock accept (demo), archive/reset tenants.
+
+Every request is logged to `copilotLog` for observability. Rate limited at 30 requests/hour per tenant.
 
 ## What I Would Improve
 
@@ -157,7 +171,7 @@ cd apps/web
 npx storybook dev -p 6006
 ```
 
-Stories exist for: PassCard, MemberRow, InviteRow, MonitorRow, StatCard, BillingCard, CsvUploadCard, MemberForm, PassForm, PipelineFlow, OnboardingStatusBadge.
+Stories exist for: PassCard, MemberRow, InviteRow, MonitorRow, StatCard, BillingCard, CsvUploadCard, MemberForm, PassForm, PipelineFlow, OnboardingStatusBadge, AiImportCard, ColumnMappingCard, ImportReviewTable.
 
 ### Project Structure (Frontend)
 
