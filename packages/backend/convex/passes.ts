@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 import { billingType } from "./schema";
 
 export const create = mutation({
@@ -75,6 +75,74 @@ export const remove = mutation({
 				ok: false as const,
 				code: "HAS_MEMBERS",
 				message: "Cannot delete a pass that has members",
+			};
+		}
+
+		await ctx.db.delete(passId);
+		return { ok: true as const };
+	},
+});
+
+// --- Internal mutations (called from copilot executeProposal) ---
+
+export const createInternal = internalMutation({
+	args: {
+		tenantId: v.id("tenants"),
+		name: v.string(),
+		description: v.string(),
+		targetMemberCount: v.number(),
+	},
+	handler: async (ctx, args) => {
+		return ctx.db.insert("passes", { ...args, createdAt: Date.now() });
+	},
+});
+
+export const updateInternal = internalMutation({
+	args: {
+		passId: v.id("passes"),
+		name: v.optional(v.string()),
+		description: v.optional(v.string()),
+		targetMemberCount: v.optional(v.number()),
+		billingType: v.optional(billingType),
+	},
+	handler: async (ctx, { passId, ...fields }) => {
+		const pass = await ctx.db.get(passId);
+		if (!pass) return { ok: false as const, message: "Pass not found" };
+
+		const updates: {
+			name?: string;
+			description?: string;
+			targetMemberCount?: number;
+			billingType?: "recurring" | "usage_based";
+		} = {};
+		if (fields.name !== undefined) updates.name = fields.name;
+		if (fields.description !== undefined)
+			updates.description = fields.description;
+		if (fields.targetMemberCount !== undefined)
+			updates.targetMemberCount = fields.targetMemberCount;
+		if (fields.billingType !== undefined)
+			updates.billingType = fields.billingType;
+
+		await ctx.db.patch(passId, updates);
+		return { ok: true as const, passId };
+	},
+});
+
+export const removeInternal = internalMutation({
+	args: { passId: v.id("passes") },
+	handler: async (ctx, { passId }) => {
+		const pass = await ctx.db.get(passId);
+		if (!pass) return { ok: false as const, message: "Pass not found" };
+
+		const members = await ctx.db
+			.query("members")
+			.withIndex("by_pass", (q) => q.eq("passId", passId))
+			.collect();
+
+		if (members.length > 0) {
+			return {
+				ok: false as const,
+				message: `Can't delete "${pass.name}" — has ${members.length} member${members.length === 1 ? "" : "s"}. Remove or reassign them first.`,
 			};
 		}
 

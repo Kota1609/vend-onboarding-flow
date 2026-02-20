@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 import { inviteMethod } from "./schema";
 
 // --- Transition validation ---
@@ -34,7 +34,7 @@ function generateAccessCode(): string {
 
 // --- Auto method helper ---
 
-function computeAutoMethod(
+export function computeAutoMethod(
 	email?: string,
 	phone?: string,
 ): "email" | "phone" | "access_code" {
@@ -506,6 +506,356 @@ export const rejectInvite = mutation({
 		await ctx.db.patch(memberId, { status: "rejected" });
 
 		return { ok: true as const, memberId };
+	},
+});
+
+// --- Internal mutations (called from copilot executeProposal) ---
+
+export const sendBulkInvitesInternal = internalMutation({
+	args: { memberIds: v.array(v.id("members")) },
+	handler: async (ctx, { memberIds }) => {
+		let succeeded = 0;
+		let skipped = 0;
+
+		for (const memberId of memberIds) {
+			const member = await ctx.db.get(memberId);
+			if (!member || member.status !== "draft") {
+				skipped++;
+				continue;
+			}
+
+			const effectiveMethod =
+				member.inviteOverrideMethod ?? member.inviteAutoMethod;
+
+			let accessCode = member.accessCode;
+			if (effectiveMethod === "access_code" && !accessCode) {
+				let attempts = 0;
+				do {
+					accessCode = generateAccessCode();
+					const existing = await ctx.db
+						.query("members")
+						.filter((q) => q.eq(q.field("accessCode"), accessCode))
+						.first();
+					if (!existing) break;
+					attempts++;
+				} while (attempts < 10);
+				if (attempts >= 10) {
+					skipped++;
+					continue;
+				}
+			}
+
+			await ctx.db.patch(memberId, { status: "invited", accessCode });
+			await ctx.db.insert("inviteAttempts", {
+				memberId,
+				method: effectiveMethod,
+				sentAt: Date.now(),
+				result: "sent",
+			});
+			succeeded++;
+		}
+
+		return { succeeded, skipped };
+	},
+});
+
+export const approveInternal = internalMutation({
+	args: { memberId: v.id("members") },
+	handler: async (ctx, { memberId }) => {
+		const member = await ctx.db.get(memberId);
+		if (!member || member.status !== "accepted") return;
+		await ctx.db.patch(memberId, { status: "approved" });
+	},
+});
+
+// --- Copilot internal mutations (Phase 2) ---
+
+export const createInternal = internalMutation({
+	args: {
+		tenantId: v.id("tenants"),
+		passId: v.id("passes"),
+		name: v.string(),
+		email: v.optional(v.string()),
+		phone: v.optional(v.string()),
+	},
+	handler: async (ctx, args) => {
+		const inviteAutoMethod = computeAutoMethod(args.email, args.phone);
+		const memberId = await ctx.db.insert("members", {
+			tenantId: args.tenantId,
+			passId: args.passId,
+			name: args.name,
+			email: args.email || undefined,
+			phone: args.phone || undefined,
+			status: "draft",
+			inviteAutoMethod,
+			createdAt: Date.now(),
+		});
+		return { ok: true as const, memberId };
+	},
+});
+
+export const createBulkInternal = internalMutation({
+	args: {
+		tenantId: v.id("tenants"),
+		passId: v.id("passes"),
+		members: v.array(
+			v.object({
+				name: v.string(),
+				email: v.optional(v.string()),
+				phone: v.optional(v.string()),
+			}),
+		),
+	},
+	handler: async (ctx, args) => {
+		// All-or-nothing: validate ALL upfront
+		const errors: Array<{ index: number; message: string }> = [];
+
+		// Load existing members for duplicate check
+		const existing = await ctx.db
+			.query("members")
+			.withIndex("by_pass", (q) => q.eq("passId", args.passId))
+			.collect();
+		const existingEmails = new Set(
+			existing
+				.filter((m) => m.email)
+				.map((m) => m.email!.toLowerCase()),
+		);
+
+		const batchEmails = new Set<string>();
+
+		for (let i = 0; i < args.members.length; i++) {
+			const m = args.members[i];
+			if (!m.name.trim()) {
+				errors.push({ index: i, message: "Name is required" });
+			}
+			if (m.email) {
+				const emailLower = m.email.toLowerCase();
+				if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(m.email)) {
+					errors.push({ index: i, message: `Invalid email: ${m.email}` });
+				} else if (existingEmails.has(emailLower)) {
+					errors.push({
+						index: i,
+						message: `Duplicate email in pass: ${m.email}`,
+					});
+				} else if (batchEmails.has(emailLower)) {
+					errors.push({
+						index: i,
+						message: `Duplicate email in batch: ${m.email}`,
+					});
+				} else {
+					batchEmails.add(emailLower);
+				}
+			}
+		}
+
+		if (errors.length > 0) {
+			return { ok: false as const, errors };
+		}
+
+		// All valid — insert all
+		for (const m of args.members) {
+			const inviteAutoMethod = computeAutoMethod(m.email, m.phone);
+			await ctx.db.insert("members", {
+				tenantId: args.tenantId,
+				passId: args.passId,
+				name: m.name.trim(),
+				email: m.email || undefined,
+				phone: m.phone || undefined,
+				status: "draft",
+				inviteAutoMethod,
+				createdAt: Date.now(),
+			});
+		}
+
+		return { ok: true as const, created: args.members.length };
+	},
+});
+
+export const removeInternal = internalMutation({
+	args: { memberId: v.id("members") },
+	handler: async (ctx, { memberId }) => {
+		const member = await ctx.db.get(memberId);
+		if (!member) return { ok: false as const, message: "Member not found" };
+		if (member.status !== "draft" && member.status !== "rejected") {
+			return {
+				ok: false as const,
+				message: `Cannot delete: status is ${member.status}. Only draft or rejected members can be deleted.`,
+			};
+		}
+		await ctx.db.delete(memberId);
+		return { ok: true as const };
+	},
+});
+
+export const removeBulkInternal = internalMutation({
+	args: { memberIds: v.array(v.id("members")) },
+	handler: async (ctx, { memberIds }) => {
+		let deleted = 0;
+		const skipped: Array<{ name: string; status: string }> = [];
+		for (const id of memberIds) {
+			const member = await ctx.db.get(id);
+			if (!member) continue;
+			if (member.status === "draft" || member.status === "rejected") {
+				await ctx.db.delete(id);
+				deleted++;
+			} else {
+				skipped.push({ name: member.name, status: member.status });
+			}
+		}
+		return { ok: true as const, deleted, skipped };
+	},
+});
+
+export const sendInviteInternal = internalMutation({
+	args: { memberId: v.id("members") },
+	handler: async (ctx, { memberId }) => {
+		const member = await ctx.db.get(memberId);
+		if (!member) return { ok: false as const, message: "Member not found" };
+		if (member.status !== "draft") {
+			return {
+				ok: false as const,
+				message: `Cannot invite: status is ${member.status}, expected draft`,
+			};
+		}
+
+		const effectiveMethod =
+			member.inviteOverrideMethod ?? member.inviteAutoMethod;
+
+		let accessCode = member.accessCode;
+		if (effectiveMethod === "access_code" && !accessCode) {
+			let attempts = 0;
+			do {
+				accessCode = generateAccessCode();
+				const existing = await ctx.db
+					.query("members")
+					.filter((q) => q.eq(q.field("accessCode"), accessCode))
+					.first();
+				if (!existing) break;
+				attempts++;
+			} while (attempts < 10);
+			if (attempts >= 10) {
+				return {
+					ok: false as const,
+					message: "Failed to generate unique access code",
+				};
+			}
+		}
+
+		await ctx.db.patch(memberId, { status: "invited", accessCode });
+		await ctx.db.insert("inviteAttempts", {
+			memberId,
+			method: effectiveMethod,
+			sentAt: Date.now(),
+			result: "sent",
+		});
+
+		return { ok: true as const };
+	},
+});
+
+export const resendInternal = internalMutation({
+	args: { memberId: v.id("members") },
+	handler: async (ctx, { memberId }) => {
+		const member = await ctx.db.get(memberId);
+		if (!member) return { ok: false as const, message: "Member not found" };
+		if (member.status !== "invited") {
+			return {
+				ok: false as const,
+				message: `Cannot resend: status is ${member.status}, expected invited`,
+			};
+		}
+
+		const effectiveMethod =
+			member.inviteOverrideMethod ?? member.inviteAutoMethod;
+		await ctx.db.insert("inviteAttempts", {
+			memberId,
+			method: effectiveMethod,
+			sentAt: Date.now(),
+			result: "sent",
+		});
+
+		return { ok: true as const };
+	},
+});
+
+export const changeMethodInternal = internalMutation({
+	args: {
+		memberId: v.id("members"),
+		method: inviteMethod,
+	},
+	handler: async (ctx, { memberId, method }) => {
+		const member = await ctx.db.get(memberId);
+		if (!member) return { ok: false as const, message: "Member not found" };
+		if (member.status !== "invited") {
+			return {
+				ok: false as const,
+				message: `Cannot change method: status is ${member.status}, expected invited`,
+			};
+		}
+
+		let accessCode = member.accessCode;
+		if (method === "access_code" && !accessCode) {
+			accessCode = generateAccessCode();
+		}
+
+		await ctx.db.patch(memberId, {
+			inviteOverrideMethod: method,
+			accessCode,
+		});
+
+		await ctx.db.insert("inviteAttempts", {
+			memberId,
+			method,
+			sentAt: Date.now(),
+			result: "sent",
+		});
+
+		return { ok: true as const };
+	},
+});
+
+export const acceptBulkInternal = internalMutation({
+	args: {
+		tenantId: v.id("tenants"),
+		passId: v.id("passes"),
+	},
+	handler: async (ctx, args) => {
+		const members = await ctx.db
+			.query("members")
+			.withIndex("by_pass_status", (q) =>
+				q.eq("passId", args.passId).eq("status", "invited"),
+			)
+			.collect();
+
+		let accepted = 0;
+		let skipped = 0;
+
+		for (const member of members) {
+			if (member.tenantId !== args.tenantId) {
+				skipped++;
+				continue;
+			}
+			await ctx.db.patch(member._id, { status: "accepted" });
+			accepted++;
+		}
+
+		return { accepted, skipped };
+	},
+});
+
+export const rejectInternal = internalMutation({
+	args: { memberId: v.id("members") },
+	handler: async (ctx, { memberId }) => {
+		const member = await ctx.db.get(memberId);
+		if (!member) return { ok: false as const, message: "Member not found" };
+		if (member.status !== "accepted") {
+			return {
+				ok: false as const,
+				message: `Cannot reject: status is ${member.status}, expected accepted`,
+			};
+		}
+		await ctx.db.patch(memberId, { status: "rejected" });
+		return { ok: true as const };
 	},
 });
 

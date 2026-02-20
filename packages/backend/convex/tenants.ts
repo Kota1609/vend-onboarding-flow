@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 
 export const create = mutation({
 	args: {
@@ -25,6 +25,148 @@ export const create = mutation({
 		});
 
 		return { ok: true as const, tenantId };
+	},
+});
+
+// --- Internal mutations (called from copilot executeProposal) ---
+
+export const createInternal = internalMutation({
+	args: {
+		companyName: v.string(),
+		adminName: v.string(),
+		adminEmail: v.optional(v.string()),
+		adminPhone: v.optional(v.string()),
+	},
+	handler: async (ctx, args) => {
+		const now = Date.now();
+
+		// Atomic: insert tenant + admin together, no orphan risk
+		const tenantId = await ctx.db.insert("tenants", {
+			companyName: args.companyName,
+			createdAt: now,
+		});
+
+		await ctx.db.insert("tenantAdmins", {
+			tenantId,
+			name: args.adminName,
+			email: args.adminEmail,
+			phone: args.adminPhone,
+			createdAt: now,
+		});
+
+		return { ok: true as const, tenantId };
+	},
+});
+
+export const archiveInternal = internalMutation({
+	args: { tenantId: v.id("tenants") },
+	handler: async (ctx, { tenantId }) => {
+		const tenant = await ctx.db.get(tenantId);
+		if (!tenant) return { ok: false as const, message: "Tenant not found" };
+		if ((tenant.status ?? "active") === "archived") {
+			return { ok: false as const, message: "Tenant is already archived" };
+		}
+
+		// Check for active members
+		const members = await ctx.db
+			.query("members")
+			.withIndex("by_tenant", (q) => q.eq("tenantId", tenantId))
+			.collect();
+
+		const activeCount = members.filter(
+			(m) => m.status === "approved" || m.status === "accepted",
+		).length;
+
+		await ctx.db.patch(tenantId, { status: "archived" });
+
+		return {
+			ok: true as const,
+			warning:
+				activeCount > 0
+					? `Warning: ${activeCount} member${activeCount === 1 ? "" : "s"} have active access. Archiving will NOT revoke their parking access.`
+					: undefined,
+		};
+	},
+});
+
+export const resetInternal = internalMutation({
+	args: { tenantId: v.id("tenants") },
+	handler: async (ctx, { tenantId }) => {
+		const tenant = await ctx.db.get(tenantId);
+		if (!tenant) return { ok: false as const, message: "Tenant not found" };
+
+		// Soft-delete: mark all members as rejected (inactive)
+		const members = await ctx.db
+			.query("members")
+			.withIndex("by_tenant", (q) => q.eq("tenantId", tenantId))
+			.collect();
+
+		let membersArchived = 0;
+		for (const m of members) {
+			if (m.status !== "rejected") {
+				await ctx.db.patch(m._id, { status: "rejected" });
+				membersArchived++;
+			}
+		}
+
+		// Soft-delete: mark all passes as archived (NOT hard delete)
+		const passes = await ctx.db
+			.query("passes")
+			.withIndex("by_tenant", (q) => q.eq("tenantId", tenantId))
+			.collect();
+
+		let passesArchived = 0;
+		for (const p of passes) {
+			if ((p.status ?? "active") !== "archived") {
+				await ctx.db.patch(p._id, { status: "archived" });
+				passesArchived++;
+			}
+		}
+
+		// Delete invite attempts for all members
+		let invitesDeleted = 0;
+		for (const m of members) {
+			const attempts = await ctx.db
+				.query("inviteAttempts")
+				.withIndex("by_member", (q) => q.eq("memberId", m._id))
+				.collect();
+			for (const a of attempts) {
+				await ctx.db.delete(a._id);
+				invitesDeleted++;
+			}
+		}
+
+		// Clean up import batches and their rows
+		const batches = await ctx.db
+			.query("importBatches")
+			.withIndex("by_tenant", (q) => q.eq("tenantId", tenantId))
+			.collect();
+		for (const batch of batches) {
+			const rows = await ctx.db
+				.query("importRows")
+				.withIndex("by_batch", (q) => q.eq("batchId", batch._id))
+				.collect();
+			for (const row of rows) {
+				await ctx.db.delete(row._id);
+			}
+			await ctx.db.delete(batch._id);
+		}
+
+		// Clean up setup suggestions
+		const suggestions = await ctx.db
+			.query("setupSuggestions")
+			.withIndex("by_tenant", (q) => q.eq("tenantId", tenantId))
+			.collect();
+		for (const s of suggestions) {
+			await ctx.db.delete(s._id);
+		}
+
+		return {
+			ok: true as const,
+			passesArchived,
+			membersArchived,
+			invitesDeleted,
+		};
 	},
 });
 
