@@ -25,6 +25,7 @@ export const importSourceType = v.union(
 	v.literal("excel"),
 	v.literal("pdf"),
 	v.literal("text"),
+	v.literal("image"),
 );
 
 export const importBatchStatus = v.union(
@@ -42,6 +43,7 @@ export const confidence = v.union(
 export default defineSchema({
 	tenants: defineTable({
 		companyName: v.string(),
+		status: v.optional(v.union(v.literal("active"), v.literal("archived"))),
 		createdAt: v.number(),
 	}),
 
@@ -59,6 +61,7 @@ export default defineSchema({
 		description: v.string(),
 		targetMemberCount: v.number(),
 		billingType: v.optional(billingType),
+		status: v.optional(v.union(v.literal("active"), v.literal("archived"))),
 		createdAt: v.number(),
 	}).index("by_tenant", ["tenantId"]),
 
@@ -93,6 +96,7 @@ export default defineSchema({
 		passId: v.id("passes"),
 		sourceType: importSourceType,
 		status: importBatchStatus,
+		rawText: v.optional(v.string()),
 		createdAt: v.number(),
 	}).index("by_tenant", ["tenantId"]),
 
@@ -108,4 +112,44 @@ export default defineSchema({
 		duplicateReason: v.optional(v.string()),
 		accepted: v.boolean(),
 	}).index("by_batch", ["batchId"]),
+
+	copilotLog: defineTable({
+		tenantId: v.string(),
+		role: v.optional(v.string()),
+		prompt: v.string(),
+		toolNames: v.array(v.string()),
+		responseLength: v.number(),
+		durationMs: v.number(),
+		createdAt: v.number(),
+	}).index("by_tenant_time", ["tenantId", "createdAt"]),
+
+	setupSuggestions: defineTable({
+		tenantId: v.id("tenants"),
+		suggestedPasses: v.array(
+			v.object({
+				name: v.string(),
+				description: v.string(),
+				estimatedMemberCount: v.number(),
+				reasoning: v.string(),
+				confidence,
+			}),
+		),
+		members: v.array(
+			v.object({
+				name: v.string(),
+				email: v.optional(v.string()),
+				phone: v.optional(v.string()),
+				suggestedPassName: v.optional(v.string()),
+				confidence,
+				notes: v.optional(v.string()),
+			}),
+		),
+		sourceNotes: v.optional(v.string()),
+		status: v.union(
+			v.literal("pending"),
+			v.literal("applied"),
+			v.literal("dismissed"),
+		),
+		createdAt: v.number(),
+	}).index("by_tenant", ["tenantId"]),
 });
