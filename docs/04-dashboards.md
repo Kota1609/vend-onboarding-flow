@@ -51,3 +51,22 @@ Returns: members + effectiveInviteMethod + lastInviteAt + duplicate flags
 - Approve/reject accepted members
 - Resend invites
 - Change invite method (updates inviteOverrideMethod + logs attempt)
+
+## Copilot Actions (Zero-Click)
+
+### Tenant Admin (from copilot chat)
+- Create/edit/delete passes
+- Add single or bulk members (parsed from text)
+- Send single/bulk invites, resend, change method
+- Approve single/all, reject members
+- All via proposal → confirm pattern
+
+### Vend Admin (from copilot chat)
+- Create tenant (atomic: tenant + admin)
+- Set billing per pass
+- Mock accept all (demo)
+- Archive/reset tenant (soft-delete)
+
+### Copilot Layout
+- `/onboarding`: 60/40 grid. Wizard left, copilot right (always visible).
+- Other pages: floating chat popup (bottom-right).

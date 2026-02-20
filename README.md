@@ -101,22 +101,31 @@ See `docs/03-decisions.md` for full ADR details.
 
 ## AI Features
 
-### Document Import (Required)
+### Document Import
 
-Upload or paste any document (PDF, CSV, Excel, free-text) and the system extracts member data using Anthropic Claude.
+Upload or paste any document (PDF, CSV, Excel, free-text, images) and the system extracts member data using Anthropic Claude.
 
 **How it works:**
-1. User uploads/pastes a document in the "Add Members" step
-2. Convex action sends the content to Claude via Vercel AI SDK `generateObject`
-3. Claude returns structured member data (name, email, phone) with confidence scores
-4. Results go to staging tables (`importBatches` / `importRows`) for review
-5. Admin reviews, edits, and confirms before data enters the members table
+1. User uploads/pastes a document in the "Add Members" step via the "AI Import" button
+2. Client-side processing: PDF text extraction (pdfjs-dist), Excel→CSV (xlsx), image→base64
+3. Hybrid routing: text-rich docs use text extraction; scanned/image docs use VLM (vision)
+4. Convex action sends content to Claude via Vercel AI SDK `generateText` + `Output.object`
+5. Claude returns structured member data (name, email, phone) with confidence scores
+6. Results go to staging tables (`importBatches` / `importRows`) for review
+7. Admin reviews (with inline editing, confidence badges, duplicate detection), then confirms
+8. Confirmed rows are inserted as "draft" members
 
 **Safety:** LLM output is **never** auto-written to the members table. The admin always has final review.
 
-### Smart Column Mapping (Encouraged)
+### Smart Column Mapping
 
-When uploading CSV files, the system uses AI to suggest column mappings (e.g., mapping "Full Name" to `name`, "E-mail Address" to `email`). The admin can accept or override suggestions.
+When uploading CSV files with non-standard headers, the system uses AI to suggest column mappings (e.g., mapping "Full Name" to `name`, "E-mail Address" to `email`). Each suggestion includes a confidence score and reasoning. The admin can accept, adjust, or skip AI suggestions and use raw headers instead.
+
+### Onboarding Assistant
+
+A floating chat panel (bottom-right) available to tenant admins. Ask natural language questions about onboarding progress, blockers, and member status. The assistant queries real-time data from passes and members to provide accurate, contextual answers.
+
+Quick actions: "Who hasn't been invited?", "Show pass progress", "Any blockers?"
 
 ## What I Would Improve
 
