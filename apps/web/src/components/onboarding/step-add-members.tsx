@@ -3,6 +3,7 @@ import type { Id } from "@onboarding-flow/backend/convex/_generated/dataModel";
 import { useMutation, useQuery } from "convex/react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { AiImportCard } from "@/components/ai-import-card";
 import { CsvUploadCard } from "@/components/csv-upload-card";
 import { MemberForm } from "@/components/member-form";
 import { MemberRow } from "@/components/member-row";
@@ -28,6 +29,7 @@ export function StepAddMembers({ tenantId, onNext }: StepAddMembersProps) {
 	);
 	const [showForm, setShowForm] = useState(false);
 	const [showCsv, setShowCsv] = useState(false);
+	const [showAiImport, setShowAiImport] = useState(false);
 	const [editingMemberId, setEditingMemberId] = useState<Id<"members"> | null>(
 		null,
 	);
@@ -130,7 +132,8 @@ export function StepAddMembers({ tenantId, onNext }: StepAddMembersProps) {
 			<div>
 				<h2 className="font-semibold text-lg">Add Members</h2>
 				<p className="text-muted-foreground text-sm">
-					Add people to your passes manually or via CSV upload.
+					Add people to your passes manually, via CSV upload, or using AI
+					document import.
 				</p>
 			</div>
 
@@ -145,6 +148,7 @@ export function StepAddMembers({ tenantId, onNext }: StepAddMembersProps) {
 							setSelectedPassId(pass._id);
 							setShowForm(false);
 							setShowCsv(false);
+							setShowAiImport(false);
 							setEditingMemberId(null);
 						}}
 					>
@@ -156,11 +160,21 @@ export function StepAddMembers({ tenantId, onNext }: StepAddMembersProps) {
 			{selectedPassId && (
 				<>
 					{/* Action buttons */}
-					{!showForm && !showCsv && (
+					{!showForm && !showCsv && !showAiImport && (
 						<div className="flex gap-2">
 							<Button onClick={() => setShowForm(true)}>Add Member</Button>
 							<Button variant="outline" onClick={() => setShowCsv(true)}>
 								Upload CSV
+							</Button>
+							<Button
+								variant="outline"
+								onClick={() => {
+									setShowAiImport(true);
+									setShowForm(false);
+									setShowCsv(false);
+								}}
+							>
+								AI Import
 							</Button>
 						</div>
 					)}
@@ -187,6 +201,16 @@ export function StepAddMembers({ tenantId, onNext }: StepAddMembersProps) {
 							existingMembers={members ?? []}
 							onConfirm={handleBulkImport}
 							onCancel={() => setShowCsv(false)}
+						/>
+					)}
+
+					{/* AI import card */}
+					{showAiImport && selectedPassId && (
+						<AiImportCard
+							tenantId={tenantId}
+							passId={selectedPassId}
+							onComplete={() => setShowAiImport(false)}
+							onCancel={() => setShowAiImport(false)}
 						/>
 					)}
 
@@ -227,15 +251,19 @@ export function StepAddMembers({ tenantId, onNext }: StepAddMembersProps) {
 					)}
 
 					{/* Empty state */}
-					{members && members.length === 0 && !showForm && !showCsv && (
-						<Card>
-							<CardContent className="py-8 text-center">
-								<p className="text-muted-foreground">
-									No members yet. Add members manually or upload a CSV.
-								</p>
-							</CardContent>
-						</Card>
-					)}
+					{members &&
+						members.length === 0 &&
+						!showForm &&
+						!showCsv &&
+						!showAiImport && (
+							<Card>
+								<CardContent className="py-8 text-center">
+									<p className="text-muted-foreground">
+										No members yet. Add members manually or upload a CSV.
+									</p>
+								</CardContent>
+							</Card>
+						)}
 				</>
 			)}
 

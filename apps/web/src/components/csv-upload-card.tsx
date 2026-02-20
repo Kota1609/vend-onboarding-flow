@@ -1,5 +1,11 @@
+import { api } from "@onboarding-flow/backend/convex/_generated/api";
+import { useAction } from "convex/react";
 import Papa from "papaparse";
 import { useRef, useState } from "react";
+import {
+	type ColumnMapping,
+	ColumnMappingCard,
+} from "@/components/column-mapping-card";
 import { Button } from "@/components/ui/button";
 import {
 	Card,
@@ -37,7 +43,9 @@ interface CsvUploadCardProps {
 	onCancel: () => void;
 }
 
-type CardState = "idle" | "previewing" | "submitting";
+type CardState = "idle" | "mapping" | "previewing" | "submitting";
+
+const STANDARD_HEADERS = ["name", "email", "phone"];
 
 function downloadTemplate() {
 	const csv = "name,email,phone\n";
@@ -48,6 +56,15 @@ function downloadTemplate() {
 	a.download = "members-template.csv";
 	a.click();
 	URL.revokeObjectURL(url);
+}
+
+function normalizeHeader(h: string): string {
+	return h.trim().toLowerCase();
+}
+
+function headersMatchStandard(headers: string[]): boolean {
+	const normalized = headers.map(normalizeHeader);
+	return STANDARD_HEADERS.every((h) => normalized.includes(h));
 }
 
 function validateRow(raw: Record<string, string>): {
@@ -86,6 +103,36 @@ function checkDuplicate(
 	return undefined;
 }
 
+function applyMapping(
+	rawRows: Record<string, string>[],
+	mappings: ColumnMapping[],
+): Record<string, string>[] {
+	const firstNameCol = mappings.find((m) => m.targetField === "first_name")?.sourceColumn;
+	const lastNameCol = mappings.find((m) => m.targetField === "last_name")?.sourceColumn;
+
+	return rawRows.map((raw) => {
+		const mapped: Record<string, string> = {};
+		for (const m of mappings) {
+			if (m.targetField === "first_name" || m.targetField === "last_name") {
+				// Handled below as combined name
+				continue;
+			}
+			if (m.targetField !== "skip") {
+				mapped[m.targetField] = raw[m.sourceColumn] ?? "";
+			}
+		}
+
+		// Combine first_name + last_name into name
+		if (firstNameCol || lastNameCol) {
+			const first = (firstNameCol ? raw[firstNameCol] : "")?.trim() ?? "";
+			const last = (lastNameCol ? raw[lastNameCol] : "")?.trim() ?? "";
+			mapped.name = [first, last].filter(Boolean).join(" ");
+		}
+
+		return mapped;
+	});
+}
+
 export function CsvUploadCard({
 	existingMembers,
 	onConfirm,
@@ -93,7 +140,24 @@ export function CsvUploadCard({
 }: CsvUploadCardProps) {
 	const [state, setState] = useState<CardState>("idle");
 	const [parsed, setParsed] = useState<ParsedRow[]>([]);
+	const [rawHeaders, setRawHeaders] = useState<string[]>([]);
+	const [rawRows, setRawRows] = useState<Record<string, string>[]>([]);
+	const [aiMappings, setAiMappings] = useState<ColumnMapping[] | null>(null);
+	const [mappingLoading, setMappingLoading] = useState(false);
+	const [mappingError, setMappingError] = useState<string | null>(null);
 	const fileRef = useRef<HTMLInputElement>(null);
+
+	const mapColumns = useAction(api.ai.mapColumns);
+
+	function processRows(rows: Record<string, string>[]) {
+		const parsedRows: ParsedRow[] = rows.map((raw, index) => {
+			const { row, errors } = validateRow(raw);
+			const duplicate = checkDuplicate(row, existingMembers);
+			return { index, row, errors, duplicate, selected: errors.length === 0 };
+		});
+		setParsed(parsedRows);
+		setState("previewing");
+	}
 
 	function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
 		const file = e.target.files?.[0];
@@ -107,16 +171,54 @@ export function CsvUploadCard({
 				skipEmptyLines: true,
 			});
 
-			const rows: ParsedRow[] = result.data.map((raw, index) => {
-				const { row, errors } = validateRow(raw);
-				const duplicate = checkDuplicate(row, existingMembers);
-				return { index, row, errors, duplicate, selected: errors.length === 0 };
-			});
+			const headers = result.meta.fields ?? [];
+			setRawHeaders(headers);
+			setRawRows(result.data);
 
-			setParsed(rows);
-			setState("previewing");
+			if (headersMatchStandard(headers)) {
+				// Standard headers — go directly to preview
+				processRows(result.data);
+			} else {
+				// Non-standard headers — show mapping
+				setState("mapping");
+				setMappingLoading(true);
+				setMappingError(null);
+
+				const sampleData = result.data
+					.slice(0, 5)
+					.map((row) => headers.map((h) => row[h] ?? ""));
+
+				mapColumns({ headers, sampleRows: sampleData })
+					.then((res) => {
+						if (res.ok) {
+							setAiMappings(res.mappings);
+						} else {
+							if (res.code === "NO_API_KEY") {
+								setMappingError(
+									"AI features require an API key. Please configure ANTHROPIC_API_KEY in the Convex dashboard.",
+								);
+							} else {
+								setMappingError(res.message);
+							}
+						}
+					})
+					.catch(() => {
+						setMappingError("Failed to get AI column suggestions.");
+					})
+					.finally(() => setMappingLoading(false));
+			}
 		};
 		reader.readAsText(file);
+	}
+
+	function handleMappingApply(mappings: ColumnMapping[]) {
+		const mapped = applyMapping(rawRows, mappings);
+		processRows(mapped);
+	}
+
+	function handleUseRawHeaders() {
+		// Try to use raw headers as-is
+		processRows(rawRows);
 	}
 
 	function toggleRow(index: number) {
@@ -137,14 +239,21 @@ export function CsvUploadCard({
 		} finally {
 			setState("idle");
 			setParsed([]);
+			setRawHeaders([]);
+			setRawRows([]);
+			setAiMappings(null);
 			if (fileRef.current) fileRef.current.value = "";
 		}
 	}
 
 	function handleCancel() {
-		if (state === "previewing") {
+		if (state === "previewing" || state === "mapping") {
 			setState("idle");
 			setParsed([]);
+			setRawHeaders([]);
+			setRawRows([]);
+			setAiMappings(null);
+			setMappingError(null);
 			if (fileRef.current) fileRef.current.value = "";
 			return;
 		}
@@ -178,6 +287,27 @@ export function CsvUploadCard({
 						</Button>
 						<Button variant="ghost" size="sm" onClick={onCancel}>
 							Cancel
+						</Button>
+					</div>
+				)}
+
+				{state === "mapping" && (
+					<div className="grid gap-3">
+						{mappingError && (
+							<p className="text-sm text-yellow-600">{mappingError}</p>
+						)}
+						<ColumnMappingCard
+							headers={rawHeaders}
+							sampleRows={rawRows
+								.slice(0, 3)
+								.map((row) => rawHeaders.map((h) => row[h] ?? ""))}
+							aiMappings={aiMappings}
+							isLoading={mappingLoading}
+							onApply={handleMappingApply}
+							onUseRawHeaders={handleUseRawHeaders}
+						/>
+						<Button variant="ghost" size="sm" onClick={handleCancel}>
+							Back
 						</Button>
 					</div>
 				)}
