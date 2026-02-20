@@ -135,24 +135,47 @@ export function AppSidebar() {
 
 			{/* Bottom section */}
 			<div className="mt-auto border-sidebar-border border-t px-1.5 py-3">
-				{/* Role switcher */}
+				{/* Role & tenant identity */}
 				<DropdownMenu>
 					<DropdownMenuTrigger
 						render={
-							<Button
-								variant="ghost"
-								size="sm"
-								className={`w-full text-sidebar-foreground ${collapsed ? "justify-center px-0" : "justify-start"}`}
+							<button
+								type="button"
+								className={`w-full rounded-md transition-colors hover:bg-sidebar-accent ${collapsed ? "px-1 py-2" : "px-3 py-2.5"}`}
 							/>
 						}
 					>
-						{collapsed
-							? role === "vend_admin"
-								? "V"
-								: "T"
-							: role === "vend_admin"
-								? "Vend Admin"
-								: "Tenant Admin"}
+						{collapsed ? (
+							<div
+								className={`mx-auto flex size-7 items-center justify-center rounded-md font-bold text-xs ${role === "vend_admin" ? "bg-sidebar-primary/15 text-sidebar-primary" : "bg-blue-500/15 text-blue-600 dark:text-blue-400"}`}
+							>
+								{role === "vend_admin"
+									? "V"
+									: (currentTenantName?.[0] ?? "T")}
+							</div>
+						) : (
+							<div className="flex items-center gap-2.5">
+								<div
+									className={`flex size-8 shrink-0 items-center justify-center rounded-md font-bold text-sm ${role === "vend_admin" ? "bg-sidebar-primary/15 text-sidebar-primary" : "bg-blue-500/15 text-blue-600 dark:text-blue-400"}`}
+								>
+									{role === "vend_admin"
+										? "V"
+										: (currentTenantName?.[0] ?? "T")}
+								</div>
+								<div className="min-w-0 text-left">
+									<p className="truncate font-semibold text-sidebar-foreground text-sm leading-tight">
+										{role === "vend_admin"
+											? "Vend Admin"
+											: (currentTenantName ?? "Tenant")}
+									</p>
+									<p className="text-sidebar-foreground/50 text-xs leading-tight">
+										{role === "vend_admin"
+											? "Platform"
+											: "Tenant Admin"}
+									</p>
+								</div>
+							</div>
+						)}
 					</DropdownMenuTrigger>
 					<DropdownMenuContent side="right" align="end">
 						<DropdownMenuGroup>
@@ -190,18 +213,11 @@ export function AppSidebar() {
 					</DropdownMenuContent>
 				</DropdownMenu>
 
-				{/* Tenant indicator */}
-				{!collapsed && role === "tenant_admin" && currentTenantName && (
-					<p className="truncate px-3 py-1 text-sidebar-foreground/60 text-xs">
-						{currentTenantName}
-					</p>
-				)}
-
 				{/* Dark mode toggle */}
 				<Button
 					variant="ghost"
 					size="sm"
-					className={`w-full gap-2 text-sidebar-foreground ${collapsed ? "justify-center px-0" : "justify-start"}`}
+					className={`mt-1 w-full gap-2 text-sidebar-foreground ${collapsed ? "justify-center px-0" : "justify-start"}`}
 					onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
 					title="Toggle theme"
 				>

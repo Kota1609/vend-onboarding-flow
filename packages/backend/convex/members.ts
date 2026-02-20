@@ -778,6 +778,34 @@ export const resendInternal = internalMutation({
 	},
 });
 
+export const resendBulkInternal = internalMutation({
+	args: { memberIds: v.array(v.id("members")) },
+	handler: async (ctx, { memberIds }) => {
+		let succeeded = 0;
+		let skipped = 0;
+
+		for (const memberId of memberIds) {
+			const member = await ctx.db.get(memberId);
+			if (!member || member.status !== "invited") {
+				skipped++;
+				continue;
+			}
+
+			const effectiveMethod =
+				member.inviteOverrideMethod ?? member.inviteAutoMethod;
+			await ctx.db.insert("inviteAttempts", {
+				memberId,
+				method: effectiveMethod,
+				sentAt: Date.now(),
+				result: "sent",
+			});
+			succeeded++;
+		}
+
+		return { succeeded, skipped };
+	},
+});
+
 export const changeMethodInternal = internalMutation({
 	args: {
 		memberId: v.id("members"),

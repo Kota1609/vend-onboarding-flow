@@ -8,26 +8,36 @@ interface Step {
 interface StepIndicatorProps {
 	currentStep: number;
 	steps: readonly Step[];
+	onStepClick?: (step: number) => void;
 }
 
-export function StepIndicator({ currentStep, steps }: StepIndicatorProps) {
+export function StepIndicator({
+	currentStep,
+	steps,
+	onStepClick,
+}: StepIndicatorProps) {
 	return (
 		<div className="flex gap-1">
 			{steps.map((step, i) => (
 				<div key={step.label} className="flex flex-1 flex-col">
 					<div className="mb-2 flex items-center gap-2">
-						<div
+						<button
+							type="button"
+							onClick={() => onStepClick?.(i)}
+							disabled={!onStepClick}
 							className={cn(
-								"flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-medium text-xs",
+								"flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-medium text-xs transition-colors",
 								i === currentStep
 									? "bg-primary text-primary-foreground"
 									: i < currentStep
 										? "bg-primary/20 text-primary"
 										: "bg-muted text-muted-foreground",
+								onStepClick &&
+									"cursor-pointer hover:ring-2 hover:ring-primary/40",
 							)}
 						>
 							{i + 1}
-						</div>
+						</button>
 						{i < steps.length - 1 && (
 							<div
 								className={cn(
@@ -37,16 +47,20 @@ export function StepIndicator({ currentStep, steps }: StepIndicatorProps) {
 							/>
 						)}
 					</div>
-					<span
+					<button
+						type="button"
+						onClick={() => onStepClick?.(i)}
+						disabled={!onStepClick}
 						className={cn(
-							"text-xs",
+							"text-left text-xs",
 							i === currentStep
 								? "font-medium text-foreground"
 								: "text-muted-foreground",
+							onStepClick && "cursor-pointer hover:text-foreground",
 						)}
 					>
 						{step.label}
-					</span>
+					</button>
 				</div>
 			))}
 		</div>

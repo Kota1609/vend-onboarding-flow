@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { internalQuery } from "./_generated/server";
 
 // Note: These internal queries accept v.string() for IDs because the
@@ -60,18 +60,25 @@ export const membersByStatus = internalQuery({
 			.withIndex("by_tenant", (q) => q.eq("tenantId", tid))
 			.collect();
 
-		return allMembers
-			.filter((m) => {
-				if (m.status !== args.status) return false;
-				if (args.passId && m.passId !== args.passId) return false;
-				return true;
-			})
-			.map((m) => ({
-				name: m.name,
-				email: m.email,
-				phone: m.phone,
-				status: m.status,
-			}));
+		const filtered = allMembers.filter((m) => {
+			if (m.status !== args.status) return false;
+			if (args.passId && m.passId !== args.passId) return false;
+			return true;
+		});
+
+		const MAX_RETURNED = 20;
+		const members = filtered.slice(0, MAX_RETURNED).map((m) => ({
+			name: m.name,
+			email: m.email,
+			phone: m.phone,
+			status: m.status,
+		}));
+
+		return {
+			members,
+			totalCount: filtered.length,
+			truncated: filtered.length > MAX_RETURNED,
+		};
 	},
 });
 
@@ -210,15 +217,32 @@ export const passExists = internalQuery({
 export const resolveMember = internalQuery({
 	args: {
 		tenantId: v.string(),
-		passId: v.string(),
+		passId: v.optional(v.string()),
 		memberName: v.string(),
 	},
 	handler: async (ctx, args) => {
-		const pid = args.passId as Id<"passes">;
-		const members = await ctx.db
-			.query("members")
-			.withIndex("by_pass", (q) => q.eq("passId", pid))
-			.collect();
+		let members: Doc<"members">[];
+		if (args.passId) {
+			const pid = args.passId as Id<"passes">;
+			members = await ctx.db
+				.query("members")
+				.withIndex("by_pass", (q) => q.eq("passId", pid))
+				.collect();
+		} else {
+			const tid = args.tenantId as Id<"tenants">;
+			members = await ctx.db
+				.query("members")
+				.withIndex("by_tenant", (q) => q.eq("tenantId", tid))
+				.collect();
+		}
+
+		// Also load pass names for context
+		const passIds = [...new Set(members.map((m) => m.passId))];
+		const passMap = new Map<string, string>();
+		for (const pid of passIds) {
+			const pass = await ctx.db.get(pid);
+			if (pass) passMap.set(String(pid), pass.name);
+		}
 
 		const needle = args.memberName.toLowerCase();
 		const matches = members
@@ -229,6 +253,7 @@ export const resolveMember = internalQuery({
 				email: m.email ?? null,
 				phone: m.phone ?? null,
 				status: m.status,
+				passName: passMap.get(String(m.passId)) ?? null,
 			}));
 
 		const capped = matches.slice(0, 10);
@@ -240,6 +265,56 @@ export const resolveMember = internalQuery({
 			};
 		}
 		return { results: capped, totalMatches: matches.length };
+	},
+});
+
+export const resolveMembersBatch = internalQuery({
+	args: {
+		tenantId: v.string(),
+		memberNames: v.array(v.string()),
+	},
+	handler: async (ctx, args) => {
+		const tid = args.tenantId as Id<"tenants">;
+		const allMembers = await ctx.db
+			.query("members")
+			.withIndex("by_tenant", (q) => q.eq("tenantId", tid))
+			.collect();
+
+		const passIds = [...new Set(allMembers.map((m) => m.passId))];
+		const passMap = new Map<string, string>();
+		for (const pid of passIds) {
+			const pass = await ctx.db.get(pid);
+			if (pass) passMap.set(String(pid), pass.name);
+		}
+
+		const results: Record<
+			string,
+			Array<{
+				memberId: string;
+				name: string;
+				email: string | null;
+				phone: string | null;
+				status: string;
+				passName: string | null;
+			}>
+		> = {};
+
+		for (const needle of args.memberNames) {
+			const lower = needle.toLowerCase();
+			results[needle] = allMembers
+				.filter((m) => m.name.toLowerCase().includes(lower))
+				.slice(0, 5)
+				.map((m) => ({
+					memberId: m._id,
+					name: m.name,
+					email: m.email ?? null,
+					phone: m.phone ?? null,
+					status: m.status,
+					passName: passMap.get(String(m.passId)) ?? null,
+				}));
+		}
+
+		return results;
 	},
 });
 

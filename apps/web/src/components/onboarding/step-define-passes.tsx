@@ -1,12 +1,10 @@
 import { api } from "@onboarding-flow/backend/convex/_generated/api";
 import type { Id } from "@onboarding-flow/backend/convex/_generated/dataModel";
 import { useMutation, useQuery } from "convex/react";
-import { FileText } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { PassCard } from "@/components/pass-card";
 import { PassForm } from "@/components/pass-form";
-import { SetupSuggestionCard } from "@/components/setup-suggestion-card";
 import { Button } from "@/components/ui/button";
 import {
 	Card,
@@ -29,7 +27,6 @@ export function StepDefinePasses({ tenantId, onNext }: StepDefinePassesProps) {
 	const removePass = useMutation(api.passes.remove);
 
 	const [showForm, setShowForm] = useState(false);
-	const [showSetupImport, setShowSetupImport] = useState(false);
 	const [editingPassId, setEditingPassId] = useState<Id<"passes"> | null>(null);
 
 	const hasAtLeastOnePass = passes && passes.length > 0;
@@ -84,24 +81,10 @@ export function StepDefinePasses({ tenantId, onNext }: StepDefinePassesProps) {
 						Create parking pass types for your company.
 					</p>
 				</div>
-				{!showForm && !showSetupImport && (
-					<div className="flex gap-2">
-						<Button variant="outline" onClick={() => setShowSetupImport(true)}>
-							<FileText className="mr-1.5 h-4 w-4" />
-							Setup from Document
-						</Button>
-						<Button onClick={() => setShowForm(true)}>Add Pass</Button>
-					</div>
+				{!showForm && (
+					<Button onClick={() => setShowForm(true)}>Add Pass</Button>
 				)}
 			</div>
-
-			{showSetupImport && (
-				<SetupSuggestionCard
-					tenantId={tenantId}
-					onComplete={() => setShowSetupImport(false)}
-					onCancel={() => setShowSetupImport(false)}
-				/>
-			)}
 
 			{showForm && (
 				<Card>

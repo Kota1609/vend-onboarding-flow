@@ -159,56 +159,73 @@ export function CsvUploadCard({
 		setState("previewing");
 	}
 
+	function parseCsvText(text: string) {
+		const result = Papa.parse<Record<string, string>>(text, {
+			header: true,
+			skipEmptyLines: true,
+		});
+
+		const headers = result.meta.fields ?? [];
+		setRawHeaders(headers);
+		setRawRows(result.data);
+
+		if (headersMatchStandard(headers)) {
+			processRows(result.data);
+		} else {
+			setState("mapping");
+			setMappingLoading(true);
+			setMappingError(null);
+
+			const sampleData = result.data
+				.slice(0, 5)
+				.map((row) => headers.map((h) => row[h] ?? ""));
+
+			mapColumns({ headers, sampleRows: sampleData })
+				.then((res) => {
+					if (res.ok) {
+						setAiMappings(res.mappings);
+					} else {
+						if (res.code === "NO_API_KEY") {
+							setMappingError(
+								"AI features require an API key. Please configure ANTHROPIC_API_KEY in the Convex dashboard.",
+							);
+						} else {
+							setMappingError(res.message);
+						}
+					}
+				})
+				.catch(() => {
+					setMappingError("Failed to get AI column suggestions.");
+				})
+				.finally(() => setMappingLoading(false));
+		}
+	}
+
 	function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
 		const file = e.target.files?.[0];
 		if (!file) return;
 
-		const reader = new FileReader();
-		reader.onload = (evt) => {
-			const text = evt.target?.result as string;
-			const result = Papa.parse<Record<string, string>>(text, {
-				header: true,
-				skipEmptyLines: true,
-			});
+		const ext = file.name.split(".").pop()?.toLowerCase();
 
-			const headers = result.meta.fields ?? [];
-			setRawHeaders(headers);
-			setRawRows(result.data);
-
-			if (headersMatchStandard(headers)) {
-				// Standard headers — go directly to preview
-				processRows(result.data);
-			} else {
-				// Non-standard headers — show mapping
-				setState("mapping");
-				setMappingLoading(true);
-				setMappingError(null);
-
-				const sampleData = result.data
-					.slice(0, 5)
-					.map((row) => headers.map((h) => row[h] ?? ""));
-
-				mapColumns({ headers, sampleRows: sampleData })
-					.then((res) => {
-						if (res.ok) {
-							setAiMappings(res.mappings);
-						} else {
-							if (res.code === "NO_API_KEY") {
-								setMappingError(
-									"AI features require an API key. Please configure ANTHROPIC_API_KEY in the Convex dashboard.",
-								);
-							} else {
-								setMappingError(res.message);
-							}
-						}
-					})
-					.catch(() => {
-						setMappingError("Failed to get AI column suggestions.");
-					})
-					.finally(() => setMappingLoading(false));
-			}
-		};
-		reader.readAsText(file);
+		if (ext === "xlsx" || ext === "xls") {
+			const reader = new FileReader();
+			reader.onload = async (evt) => {
+				const arrayBuffer = evt.target?.result as ArrayBuffer;
+				const XLSX = await import("xlsx");
+				const workbook = XLSX.read(arrayBuffer);
+				const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+				const csvText = XLSX.utils.sheet_to_csv(firstSheet);
+				parseCsvText(csvText);
+			};
+			reader.readAsArrayBuffer(file);
+		} else {
+			const reader = new FileReader();
+			reader.onload = (evt) => {
+				const text = evt.target?.result as string;
+				parseCsvText(text);
+			};
+			reader.readAsText(file);
+		}
 	}
 
 	function handleMappingApply(mappings: ColumnMapping[]) {
@@ -267,9 +284,9 @@ export function CsvUploadCard({
 	return (
 		<Card>
 			<CardHeader>
-				<CardTitle>Upload CSV</CardTitle>
+				<CardTitle>Upload CSV / Excel</CardTitle>
 				<CardDescription>
-					Import members from a CSV file with columns: name, email, phone
+					Import members from a CSV or Excel file with columns: name, email, phone
 				</CardDescription>
 			</CardHeader>
 			<CardContent>
@@ -278,7 +295,7 @@ export function CsvUploadCard({
 						<input
 							ref={fileRef}
 							type="file"
-							accept=".csv"
+							accept=".csv,.xlsx,.xls"
 							onChange={handleFile}
 							className="text-sm file:mr-3 file:border file:border-border file:bg-background file:px-3 file:py-1.5 file:font-medium file:text-foreground file:text-sm"
 						/>

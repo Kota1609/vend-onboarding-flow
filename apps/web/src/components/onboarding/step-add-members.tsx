@@ -1,6 +1,7 @@
 import { api } from "@onboarding-flow/backend/convex/_generated/api";
 import type { Id } from "@onboarding-flow/backend/convex/_generated/dataModel";
 import { useMutation, useQuery } from "convex/react";
+import { Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { AiImportCard } from "@/components/ai-import-card";
@@ -168,12 +169,14 @@ export function StepAddMembers({ tenantId, onNext }: StepAddMembersProps) {
 							</Button>
 							<Button
 								variant="outline"
+								className="border-primary/30 bg-primary/5 hover:bg-primary/10"
 								onClick={() => {
 									setShowAiImport(true);
 									setShowForm(false);
 									setShowCsv(false);
 								}}
 							>
+								<Sparkles className="mr-1.5 h-4 w-4 text-primary" />
 								AI Import
 							</Button>
 						</div>

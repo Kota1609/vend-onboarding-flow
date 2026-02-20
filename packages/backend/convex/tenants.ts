@@ -170,6 +170,82 @@ export const resetInternal = internalMutation({
 	},
 });
 
+export const hardDeleteInternal = internalMutation({
+	args: { tenantId: v.id("tenants") },
+	handler: async (ctx, { tenantId }) => {
+		const tenant = await ctx.db.get(tenantId);
+		if (!tenant) return { ok: false as const, message: "Tenant not found" };
+
+		// Delete all members + their invite attempts
+		const members = await ctx.db
+			.query("members")
+			.withIndex("by_tenant", (q) => q.eq("tenantId", tenantId))
+			.collect();
+		for (const m of members) {
+			const attempts = await ctx.db
+				.query("inviteAttempts")
+				.withIndex("by_member", (q) => q.eq("memberId", m._id))
+				.collect();
+			for (const a of attempts) await ctx.db.delete(a._id);
+			await ctx.db.delete(m._id);
+		}
+
+		// Delete all passes
+		const passes = await ctx.db
+			.query("passes")
+			.withIndex("by_tenant", (q) => q.eq("tenantId", tenantId))
+			.collect();
+		for (const p of passes) await ctx.db.delete(p._id);
+
+		// Delete import batches + rows
+		const batches = await ctx.db
+			.query("importBatches")
+			.withIndex("by_tenant", (q) => q.eq("tenantId", tenantId))
+			.collect();
+		for (const batch of batches) {
+			const rows = await ctx.db
+				.query("importRows")
+				.withIndex("by_batch", (q) => q.eq("batchId", batch._id))
+				.collect();
+			for (const row of rows) await ctx.db.delete(row._id);
+			await ctx.db.delete(batch._id);
+		}
+
+		// Delete setup suggestions
+		const suggestions = await ctx.db
+			.query("setupSuggestions")
+			.withIndex("by_tenant", (q) => q.eq("tenantId", tenantId))
+			.collect();
+		for (const s of suggestions) await ctx.db.delete(s._id);
+
+		// Delete tenant admins
+		const admins = await ctx.db
+			.query("tenantAdmins")
+			.withIndex("by_tenant", (q) => q.eq("tenantId", tenantId))
+			.collect();
+		for (const a of admins) await ctx.db.delete(a._id);
+
+		// Delete copilot logs
+		const logs = await ctx.db
+			.query("copilotLog")
+			.withIndex("by_tenant_time", (q) => q.eq("tenantId", tenantId))
+			.collect();
+		for (const l of logs) await ctx.db.delete(l._id);
+
+		// Delete the tenant itself
+		await ctx.db.delete(tenantId);
+
+		return {
+			ok: true as const,
+			deleted: {
+				members: members.length,
+				passes: passes.length,
+				tenant: tenant.companyName,
+			},
+		};
+	},
+});
+
 export const list = query({
 	handler: async (ctx) => {
 		const tenants = await ctx.db.query("tenants").collect();

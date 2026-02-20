@@ -116,7 +116,7 @@ Current onboarding state (pre-loaded — do NOT re-query unless user asks for mo
 			system: systemPrompt,
 			messages,
 			tools,
-			stopWhen: stepCountIs(5),
+			stopWhen: stepCountIs(8),
 		});
 
 		// --- Handle step cap: fallback if text is empty ---
@@ -135,8 +135,9 @@ Current onboarding state (pre-loaded — do NOT re-query unless user asks for mo
 		}));
 
 		if (!text && toolCalls.length > 0) {
-			text =
-				"I gathered some data but couldn't form a complete answer. Here's what I found — try asking a more specific question.";
+			// LLM hit step cap before producing text — summarize what was found
+			const toolNames = [...new Set(toolCalls.map((tc) => tc.toolName))];
+			text = `I ran out of processing steps after calling ${toolNames.join(", ")}. Try a more specific question like "How many draft members in Standard?" or "Show Executive pass progress".`;
 		}
 
 		// --- Observability: log to copilotLog table ---
@@ -165,16 +166,12 @@ const TENANT_ADMIN_ACTIONS = [
 	"createPass",
 	"editPass",
 	"deletePass",
-	"addMember",
-	"addBulkMembers",
-	"deleteMember",
-	"deleteBulkMembers",
-	"sendBulkInvites",
-	"sendSingleInvite",
-	"resendInvite",
+	"addMembers",
+	"deleteMembers",
+	"sendInvites",
+	"resendInvites",
 	"changeMethod",
-	"approveSingle",
-	"approveAll",
+	"approveMembers",
 	"rejectMember",
 ];
 
@@ -305,29 +302,8 @@ export const executeProposal = action({
 			return { ok: true, message: "Pass deleted" };
 		}
 
-		// --- Add Member ---
-		if (proposalAction === "addMember") {
-			if (!intent.tenantId || !intent.passId || !intent.name) {
-				return {
-					ok: false,
-					message: "Missing required fields for adding member.",
-				};
-			}
-			const passErr = await validatePass(intent.passId);
-			if (passErr) return { ok: false, message: passErr };
-
-			await ctx.runMutation(internal.members.createInternal, {
-				tenantId: intent.tenantId as Id<"tenants">,
-				passId: intent.passId as Id<"passes">,
-				name: intent.name,
-				email: intent.email,
-				phone: intent.phone,
-			});
-			return { ok: true, message: `Added "${intent.name}"` };
-		}
-
-		// --- Add Bulk Members ---
-		if (proposalAction === "addBulkMembers") {
+		// --- Add Members ---
+		if (proposalAction === "addMembers") {
 			if (!intent.tenantId || !intent.passId || !intent.members) {
 				return {
 					ok: false,
@@ -360,20 +336,8 @@ export const executeProposal = action({
 			return { ok: true, message: `Added ${result.created} members` };
 		}
 
-		// --- Delete Member ---
-		if (proposalAction === "deleteMember") {
-			if (!intent.memberId) {
-				return { ok: false, message: "Missing memberId for deletion." };
-			}
-			const result = await ctx.runMutation(internal.members.removeInternal, {
-				memberId: intent.memberId as Id<"members">,
-			});
-			if (!result.ok) return { ok: false, message: result.message };
-			return { ok: true, message: "Member deleted" };
-		}
-
-		// --- Delete Bulk Members ---
-		if (proposalAction === "deleteBulkMembers") {
+		// --- Delete Members ---
+		if (proposalAction === "deleteMembers") {
 			if (!intent.memberIds || intent.memberIds.length === 0) {
 				return {
 					ok: false,
@@ -399,25 +363,30 @@ export const executeProposal = action({
 			return { ok: true, message: msg };
 		}
 
-		// --- Send Bulk Invites ---
-		if (proposalAction === "sendBulkInvites") {
-			if (!intent.tenantId || !intent.passId) {
+		// --- Send Invites ---
+		if (proposalAction === "sendInvites") {
+			let memberIds: Id<"members">[];
+			if (intent.memberIds && intent.memberIds.length > 0) {
+				memberIds = intent.memberIds.map((id) => id as Id<"members">);
+			} else if (intent.tenantId && intent.passId) {
+				const passErr = await validatePass(intent.passId);
+				if (passErr) return { ok: false, message: passErr };
+
+				const ids = await ctx.runQuery(
+					internal.assistantQueries.memberIdsByStatus,
+					{
+						tenantId: intent.tenantId,
+						passId: intent.passId,
+						status: "draft",
+					},
+				);
+				memberIds = ids;
+			} else {
 				return {
 					ok: false,
-					message: "Missing pass information for sending invites.",
+					message: "Missing member IDs or pass for sending invites.",
 				};
 			}
-			const passErr = await validatePass(intent.passId);
-			if (passErr) return { ok: false, message: passErr };
-
-			const memberIds = await ctx.runQuery(
-				internal.assistantQueries.memberIdsByStatus,
-				{
-					tenantId: intent.tenantId,
-					passId: intent.passId,
-					status: "draft",
-				},
-			);
 			if (memberIds.length === 0) {
 				return {
 					ok: false,
@@ -435,29 +404,41 @@ export const executeProposal = action({
 			};
 		}
 
-		// --- Send Single Invite ---
-		if (proposalAction === "sendSingleInvite") {
-			if (!intent.memberId) {
-				return { ok: false, message: "Missing memberId for sending invite." };
+		// --- Resend Invites ---
+		if (proposalAction === "resendInvites") {
+			let memberIds: Id<"members">[];
+			if (intent.memberIds && intent.memberIds.length > 0) {
+				memberIds = intent.memberIds.map((id) => id as Id<"members">);
+			} else if (intent.tenantId && intent.passId) {
+				const ids = await ctx.runQuery(
+					internal.assistantQueries.memberIdsByStatus,
+					{
+						tenantId: intent.tenantId,
+						passId: intent.passId,
+						status: "invited",
+					},
+				);
+				memberIds = ids;
+			} else {
+				return {
+					ok: false,
+					message: "Missing member IDs or pass for bulk resend.",
+				};
+			}
+			if (memberIds.length === 0) {
+				return {
+					ok: false,
+					message: "No invited members found to resend to.",
+				};
 			}
 			const result = await ctx.runMutation(
-				internal.members.sendInviteInternal,
-				{ memberId: intent.memberId as Id<"members"> },
+				internal.members.resendBulkInternal,
+				{ memberIds },
 			);
-			if (!result.ok) return { ok: false, message: result.message };
-			return { ok: true, message: "Invite sent" };
-		}
-
-		// --- Resend Invite ---
-		if (proposalAction === "resendInvite") {
-			if (!intent.memberId) {
-				return { ok: false, message: "Missing memberId for resending invite." };
-			}
-			const result = await ctx.runMutation(internal.members.resendInternal, {
-				memberId: intent.memberId as Id<"members">,
-			});
-			if (!result.ok) return { ok: false, message: result.message };
-			return { ok: true, message: "Invite resent" };
+			return {
+				ok: true,
+				message: `Resent ${result.succeeded} invites${result.skipped > 0 ? ` (${result.skipped} skipped)` : ""}`,
+			};
 		}
 
 		// --- Change Invite Method ---
@@ -482,36 +463,30 @@ export const executeProposal = action({
 			};
 		}
 
-		// --- Approve Single ---
-		if (proposalAction === "approveSingle") {
-			if (!intent.memberId) {
-				return { ok: false, message: "Missing memberId for approval." };
-			}
-			await ctx.runMutation(internal.members.approveInternal, {
-				memberId: intent.memberId as Id<"members">,
-			});
-			return { ok: true, message: "Member approved" };
-		}
+		// --- Approve Members ---
+		if (proposalAction === "approveMembers") {
+			let memberIds: Id<"members">[];
+			if (intent.memberIds && intent.memberIds.length > 0) {
+				memberIds = intent.memberIds.map((id) => id as Id<"members">);
+			} else if (intent.tenantId && intent.passId) {
+				const passErr = await validatePass(intent.passId);
+				if (passErr) return { ok: false, message: passErr };
 
-		// --- Approve All ---
-		if (proposalAction === "approveAll") {
-			if (!intent.tenantId || !intent.passId) {
+				const ids = await ctx.runQuery(
+					internal.assistantQueries.memberIdsByStatus,
+					{
+						tenantId: intent.tenantId,
+						passId: intent.passId,
+						status: "accepted",
+					},
+				);
+				memberIds = ids;
+			} else {
 				return {
 					ok: false,
-					message: "Missing pass information for approving members.",
+					message: "Missing member IDs or pass for approving members.",
 				};
 			}
-			const passErr = await validatePass(intent.passId);
-			if (passErr) return { ok: false, message: passErr };
-
-			const memberIds = await ctx.runQuery(
-				internal.assistantQueries.memberIdsByStatus,
-				{
-					tenantId: intent.tenantId,
-					passId: intent.passId,
-					status: "accepted",
-				},
-			);
 			if (memberIds.length === 0) {
 				return {
 					ok: false,

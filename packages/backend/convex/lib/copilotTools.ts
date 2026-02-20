@@ -55,22 +55,49 @@ function readTools(ctx: ActionCtx, tenantId: string) {
 
 		resolveMember: tool({
 			description:
-				"Look up a member by name in a pass. Returns ALL matches. If multiple, list them and ask the user to clarify — NEVER pick arbitrarily.",
+				"Look up a member by name. Searches across ALL passes by default, or within a specific pass if passId is provided. Returns matches with passName. If multiple, list them and ask the user to clarify — NEVER pick arbitrarily.",
 			inputSchema: z.object({
-				passId: z.string().describe("The pass to search within"),
+				passId: z
+					.string()
+					.optional()
+					.describe(
+						"Optional pass ID to search within. Omit to search all passes.",
+					),
 				memberName: z
 					.string()
 					.describe(
 						"The member name to look up (case-insensitive partial match)",
 					),
 			}),
-			execute: async (args: { passId: string; memberName: string }) => {
+			execute: async (args: { passId?: string; memberName: string }) => {
 				try {
 					return await ctx.runQuery(internal.assistantQueries.resolveMember, {
 						tenantId,
 						passId: args.passId,
 						memberName: args.memberName,
 					});
+				} catch (e) {
+					return {
+						error: e instanceof Error ? e.message : "Query failed",
+					};
+				}
+			},
+		}),
+
+		resolveMembersBatch: tool({
+			description:
+				"Look up MULTIPLE members by name in a single call. Use this instead of calling resolveMember multiple times. Searches across all passes. Returns matches keyed by search name.",
+			inputSchema: z.object({
+				memberNames: z
+					.array(z.string())
+					.describe("Array of member names to look up"),
+			}),
+			execute: async (args: { memberNames: string[] }) => {
+				try {
+					return await ctx.runQuery(
+						internal.assistantQueries.resolveMembersBatch,
+						{ tenantId, memberNames: args.memberNames },
+					);
 				} catch (e) {
 					return {
 						error: e instanceof Error ? e.message : "Query failed",
@@ -113,7 +140,8 @@ function readTools(ctx: ActionCtx, tenantId: string) {
 		}),
 
 		getMembersByStatus: tool({
-			description: "List members filtered by status and optional pass",
+			description:
+				"List members filtered by status and optional pass. Returns up to 20 members and totalCount. If truncated, summarize the count — do NOT re-query for more.",
 			inputSchema: z.object({
 				status: z.enum([
 					"draft",
@@ -225,36 +253,8 @@ function passWriteTools(tenantId: string) {
 
 function memberWriteTools(tenantId: string) {
 	return {
-		proposeAddMember: tool({
-			description:
-				"Propose adding a single member to a pass. Use resolvePass first.",
-			inputSchema: z.object({
-				passId: z.string(),
-				name: z.string().min(1).describe("Human name, NOT an email"),
-				email: z.string().optional(),
-				phone: z.string().optional(),
-			}),
-			execute: async (args: {
-				passId: string;
-				name: string;
-				email?: string;
-				phone?: string;
-			}): Promise<Proposal> => ({
-				action: "addMember",
-				intent: {
-					tenantId,
-					passId: args.passId,
-					name: args.name,
-					email: args.email,
-					phone: args.phone,
-				},
-				requiresConfirmation: true,
-				summary: `Add "${args.name}" to pass${args.email ? ` (${args.email})` : ""}`,
-			}),
-		}),
-
-		proposeAddBulkMembers: tool({
-			description: `Propose adding multiple members. Parse user input carefully.
+		proposeAddMembers: tool({
+			description: `Add one or more members to a pass. Parse user input carefully.
 Example: "Add John john@acme.com, Jane, Bob bob@test.com"
 -> members: [{ name: "John", email: "john@acme.com" }, { name: "Jane" }, { name: "Bob", email: "bob@test.com" }]
 Proposal summary MUST list each parsed member for user verification.`,
@@ -279,7 +279,7 @@ Proposal summary MUST list each parsed member for user verification.`,
 					)
 					.join(", ");
 				return {
-					action: "addBulkMembers",
+					action: "addMembers",
 					intent: {
 						tenantId,
 						passId: args.passId,
@@ -291,22 +291,9 @@ Proposal summary MUST list each parsed member for user verification.`,
 			},
 		}),
 
-		proposeDeleteMember: tool({
+		proposeDeleteMembers: tool({
 			description:
-				"Propose deleting a single member. Use resolveMember first. Only draft or rejected members can be deleted.",
-			inputSchema: z.object({
-				memberId: z.string(),
-			}),
-			execute: async (args: { memberId: string }): Promise<Proposal> => ({
-				action: "deleteMember",
-				intent: { memberId: args.memberId },
-				requiresConfirmation: true,
-				summary: "Delete this member",
-			}),
-		}),
-		proposeDeleteBulkMembers: tool({
-			description:
-				"Propose deleting multiple members at once. ALWAYS use this instead of proposeDeleteMember when deleting more than one member. Use resolveMember for each first. Only draft or rejected members will be deleted; others are skipped.",
+				"Delete one or more members. Use resolveMember or resolveMembersBatch first. Only draft or rejected members will be deleted; others are skipped.",
 			inputSchema: z.object({
 				memberIds: z
 					.array(z.string())
@@ -319,7 +306,7 @@ Proposal summary MUST list each parsed member for user verification.`,
 				memberIds: string[];
 				memberNames: string[];
 			}): Promise<Proposal> => ({
-				action: "deleteBulkMembers",
+				action: "deleteMembers",
 				intent: { memberIds: args.memberIds },
 				requiresConfirmation: true,
 				summary: `Delete ${args.memberIds.length} members: ${args.memberNames.join(", ")}`,
@@ -332,53 +319,124 @@ function inviteWriteTools(ctx: ActionCtx, tenantId: string) {
 	return {
 		proposeSendInvites: tool({
 			description:
-				"Propose sending invites to all draft members in a pass. Use resolvePass first.",
-			inputSchema: z.object({ passId: z.string() }),
-			execute: async ({ passId }: { passId: string }): Promise<Proposal> => {
-				try {
-					const count = await ctx.runQuery(
-						internal.assistantQueries.countByStatus,
-						{ tenantId, passId, status: "draft" },
-					);
+				"Send invites to specific draft members by ID, or to all draft members in a pass. Use resolvePass first for pass-wide, or resolveMember/resolveMembersBatch for specific members.",
+			inputSchema: z.object({
+				passId: z
+					.string()
+					.optional()
+					.describe(
+						"Send to all draft members in this pass. Omit if using memberIds.",
+					),
+				memberIds: z
+					.array(z.string())
+					.optional()
+					.describe(
+						"Specific draft member IDs to send to. Omit to send to all drafts in the pass.",
+					),
+			}),
+			execute: async (args: {
+				passId?: string;
+				memberIds?: string[];
+			}): Promise<Proposal> => {
+				if (args.memberIds && args.memberIds.length > 0) {
 					return {
-						action: "sendBulkInvites",
-						intent: { tenantId, passId, status: "draft" },
+						action: "sendInvites",
+						intent: { tenantId, memberIds: args.memberIds },
 						requiresConfirmation: true,
-						summary: `Send invites to all current draft members (${count})`,
-					};
-				} catch {
-					return {
-						action: "sendBulkInvites",
-						intent: { tenantId, passId, status: "draft" },
-						requiresConfirmation: true,
-						summary: "Send invites to all draft members in this pass",
+						summary: `Send invites to ${args.memberIds.length} members`,
 					};
 				}
+				if (args.passId) {
+					try {
+						const count = await ctx.runQuery(
+							internal.assistantQueries.countByStatus,
+							{ tenantId, passId: args.passId, status: "draft" },
+						);
+						return {
+							action: "sendInvites",
+							intent: { tenantId, passId: args.passId, status: "draft" },
+							requiresConfirmation: true,
+							summary: `Send invites to all current draft members (${count})`,
+						};
+					} catch {
+						return {
+							action: "sendInvites",
+							intent: { tenantId, passId: args.passId, status: "draft" },
+							requiresConfirmation: true,
+							summary: "Send invites to all draft members in this pass",
+						};
+					}
+				}
+				return {
+					error:
+						"Provide either passId (for pass-wide) or memberIds (for specific members).",
+				} as unknown as Proposal;
 			},
 		}),
 
-		proposeSendSingleInvite: tool({
+		proposeResendInvites: tool({
 			description:
-				"Propose sending an invite to a single member. Use resolveMember first. Member must be draft.",
-			inputSchema: z.object({ memberId: z.string() }),
-			execute: async (args: { memberId: string }): Promise<Proposal> => ({
-				action: "sendSingleInvite",
-				intent: { memberId: args.memberId },
-				requiresConfirmation: true,
-				summary: "Send invite to this member",
+				"Resend invites to all invited members in a pass, or to specific members by ID. Use resolvePass first for pass-wide resend, or resolveMembersBatch for specific members.",
+			inputSchema: z.object({
+				passId: z
+					.string()
+					.optional()
+					.describe(
+						"Resend to all invited members in this pass. Omit if using memberIds.",
+					),
+				memberIds: z
+					.array(z.string())
+					.optional()
+					.describe(
+						"Specific member IDs to resend to. Omit to resend to all invited in the pass.",
+					),
 			}),
-		}),
-
-		proposeResendInvite: tool({
-			description:
-				"Propose resending an invite to a member. Use resolveMember first. Member must be invited.",
-			inputSchema: z.object({ memberId: z.string() }),
-			execute: async (args: { memberId: string }): Promise<Proposal> => ({
-				action: "resendInvite",
-				intent: { memberId: args.memberId },
-				requiresConfirmation: true,
-				summary: "Resend invite to this member",
-			}),
+			execute: async (args: {
+				passId?: string;
+				memberIds?: string[];
+			}): Promise<Proposal> => {
+				if (args.memberIds && args.memberIds.length > 0) {
+					return {
+						action: "resendInvites",
+						intent: { tenantId, memberIds: args.memberIds },
+						requiresConfirmation: true,
+						summary: `Resend invites to ${args.memberIds.length} members`,
+					};
+				}
+				if (args.passId) {
+					try {
+						const count = await ctx.runQuery(
+							internal.assistantQueries.countByStatus,
+							{ tenantId, passId: args.passId, status: "invited" },
+						);
+						return {
+							action: "resendInvites",
+							intent: {
+								tenantId,
+								passId: args.passId,
+								status: "invited",
+							},
+							requiresConfirmation: true,
+							summary: `Resend invites to all invited members (${count})`,
+						};
+					} catch {
+						return {
+							action: "resendInvites",
+							intent: {
+								tenantId,
+								passId: args.passId,
+								status: "invited",
+							},
+							requiresConfirmation: true,
+							summary: "Resend invites to all invited members in this pass",
+						};
+					}
+				}
+				return {
+					error:
+						"Provide either passId (for pass-wide) or memberIds (for specific members).",
+				} as unknown as Proposal;
+			},
 		}),
 
 		proposeChangeMethod: tool({
@@ -403,42 +461,68 @@ function inviteWriteTools(ctx: ActionCtx, tenantId: string) {
 
 function approveWriteTools(ctx: ActionCtx, tenantId: string) {
 	return {
-		proposeApproveSingle: tool({
+		proposeApproveMembers: tool({
 			description:
-				"Propose approving a single member. Use resolveMember first. Member must be accepted.",
-			inputSchema: z.object({ memberId: z.string() }),
-			execute: async (args: { memberId: string }): Promise<Proposal> => ({
-				action: "approveSingle",
-				intent: { memberId: args.memberId },
-				requiresConfirmation: true,
-				summary: "Approve this member",
+				"Approve specific accepted members by ID, or all accepted members in a pass. Use resolvePass first for pass-wide, or resolveMember/resolveMembersBatch for specific members.",
+			inputSchema: z.object({
+				passId: z
+					.string()
+					.optional()
+					.describe(
+						"Approve all accepted members in this pass. Omit if using memberIds.",
+					),
+				memberIds: z
+					.array(z.string())
+					.optional()
+					.describe(
+						"Specific accepted member IDs to approve. Omit to approve all accepted in the pass.",
+					),
 			}),
-		}),
-
-		proposeApproveAll: tool({
-			description:
-				"Propose approving all accepted members in a pass. Use resolvePass first.",
-			inputSchema: z.object({ passId: z.string() }),
-			execute: async ({ passId }: { passId: string }): Promise<Proposal> => {
-				try {
-					const count = await ctx.runQuery(
-						internal.assistantQueries.countByStatus,
-						{ tenantId, passId, status: "accepted" },
-					);
+			execute: async (args: {
+				passId?: string;
+				memberIds?: string[];
+			}): Promise<Proposal> => {
+				if (args.memberIds && args.memberIds.length > 0) {
 					return {
-						action: "approveAll",
-						intent: { tenantId, passId, status: "accepted" },
+						action: "approveMembers",
+						intent: { tenantId, memberIds: args.memberIds },
 						requiresConfirmation: true,
-						summary: `Approve all current accepted members (${count})`,
-					};
-				} catch {
-					return {
-						action: "approveAll",
-						intent: { tenantId, passId, status: "accepted" },
-						requiresConfirmation: true,
-						summary: "Approve all accepted members in this pass",
+						summary: `Approve ${args.memberIds.length} members`,
 					};
 				}
+				if (args.passId) {
+					try {
+						const count = await ctx.runQuery(
+							internal.assistantQueries.countByStatus,
+							{ tenantId, passId: args.passId, status: "accepted" },
+						);
+						return {
+							action: "approveMembers",
+							intent: {
+								tenantId,
+								passId: args.passId,
+								status: "accepted",
+							},
+							requiresConfirmation: true,
+							summary: `Approve all current accepted members (${count})`,
+						};
+					} catch {
+						return {
+							action: "approveMembers",
+							intent: {
+								tenantId,
+								passId: args.passId,
+								status: "accepted",
+							},
+							requiresConfirmation: true,
+							summary: "Approve all accepted members in this pass",
+						};
+					}
+				}
+				return {
+					error:
+						"Provide either passId (for pass-wide) or memberIds (for specific members).",
+				} as unknown as Proposal;
 			},
 		}),
 
@@ -476,9 +560,10 @@ function tenantAdminWriteTools(
 			// Outside wizard: 4 most common write tools
 			return {
 				proposeCreatePass: passWriteTools(tenantId).proposeCreatePass,
-				proposeAddMember: memberWriteTools(tenantId).proposeAddMember,
+				proposeAddMembers: memberWriteTools(tenantId).proposeAddMembers,
 				proposeSendInvites: inviteWriteTools(ctx, tenantId).proposeSendInvites,
-				proposeApproveAll: approveWriteTools(ctx, tenantId).proposeApproveAll,
+				proposeApproveMembers: approveWriteTools(ctx, tenantId)
+					.proposeApproveMembers,
 			};
 	}
 }
