@@ -12,6 +12,7 @@ Create a new React component in `apps/web/src/components/` with a matching Story
 1. Ask what the component does and what props it needs
 2. Create `apps/web/src/components/{name}.tsx`:
    - Use shadcn/ui primitives as base
+   - Follow variant rules in skills.md "Theme & Styling" (solid teal for active/actions, outline for unselected, never `"secondary"` for active state)
    - Accept typed props (no `any`)
    - Handle loading, empty, and error states
 3. Create `apps/web/src/components/{name}.stories.tsx`:

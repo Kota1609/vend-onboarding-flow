@@ -101,7 +101,8 @@ export function PassCard({
 
 					{/* Status breakdown */}
 					<div className="flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground text-xs">
-						<span>{memberCount} total</span>
+						<span>{memberCount} members</span>
+						<span>Target: {targetMemberCount}</span>
 						{statusBreakdown.draft > 0 && (
 							<span>{statusBreakdown.draft} draft</span>
 						)}

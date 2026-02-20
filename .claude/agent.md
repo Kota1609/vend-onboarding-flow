@@ -24,6 +24,16 @@ Prioritize: correctness, type-safety, real-time reactive UX, auditability, clean
    - Run checks (typecheck, lint)
 3. Keep commits small and meaningful. Note tradeoffs in docs/03-decisions.md.
 
+## Copilot Development Guidelines
+- Copilot has TWO separate tool sets: Tenant Admin and Vend Admin. Never mix tools across roles.
+- All write tools return Proposals (never mutate directly). Execution happens via executeProposal.
+- Internal mutations are idempotent: skip wrong-status, return { succeeded, skipped }.
+- New internal mutations go in members.ts, passes.ts, tenants.ts. New queries in assistantQueries.ts.
+- Tool builders live in lib/copilotTools.ts. Prompts in lib/prompts.ts. Execution in assistant.ts.
+- Max 9 tools per role per request. Step filtering for Tenant Admin only.
+- Bulk mutations are all-or-nothing: validate upfront, insert all or none.
+- Destructive operations (archive/reset tenant, delete pass) must have explicit error messages explaining why they failed.
+
 ## Scope control
 - Do NOT invent features outside the brief.
 - If something is ambiguous, add a TODO + note in decisions log.

@@ -1,5 +1,5 @@
 import type { Id } from "@onboarding-flow/backend/convex/_generated/dataModel";
-import { createContext, useContext, useState } from "react";
+import { createContext, useCallback, useContext, useState } from "react";
 
 export type Role = "vend_admin" | "tenant_admin";
 
@@ -12,9 +12,35 @@ interface AuthState {
 
 const AuthContext = createContext<AuthState | null>(null);
 
+function loadRole(): Role {
+	const stored = localStorage.getItem("auth-role");
+	if (stored === "tenant_admin" || stored === "vend_admin") return stored;
+	return "vend_admin";
+}
+
+function loadTenantId(): Id<"tenants"> | null {
+	return (localStorage.getItem("auth-tenantId") as Id<"tenants">) || null;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-	const [role, setRole] = useState<Role>("vend_admin");
-	const [tenantId, setTenantId] = useState<Id<"tenants"> | null>(null);
+	const [role, setRoleState] = useState<Role>(loadRole);
+	const [tenantId, setTenantIdState] = useState<Id<"tenants"> | null>(
+		loadTenantId,
+	);
+
+	const setRole = useCallback((r: Role) => {
+		setRoleState(r);
+		localStorage.setItem("auth-role", r);
+	}, []);
+
+	const setTenantId = useCallback((id: Id<"tenants"> | null) => {
+		setTenantIdState(id);
+		if (id) {
+			localStorage.setItem("auth-tenantId", id);
+		} else {
+			localStorage.removeItem("auth-tenantId");
+		}
+	}, []);
 
 	return (
 		<AuthContext.Provider value={{ role, tenantId, setRole, setTenantId }}>
